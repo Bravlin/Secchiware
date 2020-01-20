@@ -1,9 +1,11 @@
+import requests as rq
+
 from datetime import datetime
 from flask import abort, Flask, jsonify, request
 
-app = Flask(__name__)
-
 environments = {}
+
+app = Flask(__name__)
 
 @app.route("/environments", methods=["GET"])
 def list_environments():
@@ -27,3 +29,16 @@ def add_environment():
 
     return jsonify(success=True)
     
+@app.route("/environments/<ip>/<port>/installed")
+def list_installed_test_sets(ip, port):
+    if not (ip in environments and port in environments[ip]):
+        abort(400)
+    else:
+        try:
+            resp = rq.get("http://" + ip + ":" + port + "/test_sets")
+            return resp.json()
+        except rq.exceptions.ConnectionError as e:
+            abort(500)
+
+if __name__ == "__main__":
+    app.run(debug=True)
