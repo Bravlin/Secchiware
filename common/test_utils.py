@@ -77,5 +77,5 @@ def _aux_get_installed_test_sets(package_name):
             installed['modules'].append(sub)
     return installed
 
-def get_installed_test_sets():
-    return _aux_get_installed_test_sets("test_sets")
+def get_installed_test_sets(installed_package):
+    return _aux_get_installed_test_sets(installed_package)

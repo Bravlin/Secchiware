@@ -1,12 +1,13 @@
-import json, requests
+import json, os, requests
 
 from flask import Flask, jsonify
 from test_utils import get_installed_test_sets
 
-with open("config.json") as config_file:
-    config = json.load(config_file)
+SCRIPT_PATH = os.path.dirname(os.path.abspath(__file__))
+TESTS_PATH = os.path.join(SCRIPT_PATH, "test_sets")
 
-installed = get_installed_test_sets()
+with open(os.path.join(SCRIPT_PATH, "config.json"), "r") as config_file:
+    config = json.load(config_file)
 
 app = Flask(__name__)
 
@@ -26,4 +27,8 @@ def connect_to_c2():
 
 if __name__ == "__main__":
     connect_to_c2()
+    if not os.path.isdir(TESTS_PATH):
+        os.mkdir(TESTS_PATH)
+        open(os.path.join(TESTS_PATH, "__init__.py"), "w").close()
+    installed = get_installed_test_sets("test_sets")
     app.run(config['ip'], config['port'], True)

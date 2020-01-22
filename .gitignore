@@ -2,3 +2,5 @@ env
 .vscode
 *.pyc
 config.json
+node/test_sets
+common/*egg-info
