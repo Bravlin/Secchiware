@@ -1,5 +1,6 @@
 import inspect
 import os
+import tarfile
 
 from abc import ABC, abstractmethod
 from importlib import import_module
@@ -51,7 +52,7 @@ class TestSetCollection():
             ts.run()
 
 
-def _aux_get_installed_test_sets(package_name):
+def get_installed_test_sets(package_name):
     installed = {
         'name': package_name.split(".")[-1],
         'subpackages': [],
@@ -62,7 +63,7 @@ def _aux_get_installed_test_sets(package_name):
             package.__path__,
             package.__name__ + '.'):
         if is_pkg:
-            sub = _aux_get_installed_test_sets(name)
+            sub = get_installed_test_sets(name)
             installed['subpackages'].append(sub)
         else:
             sub = {
@@ -77,5 +78,14 @@ def _aux_get_installed_test_sets(package_name):
             installed['modules'].append(sub)
     return installed
 
-def get_installed_test_sets(installed_package):
-    return _aux_get_installed_test_sets(installed_package)
+def compress_test_sets(test_sets, file_name):
+    def filter_packages(x):
+        if os.path.isdir(x.name) and os.path.basename(x.name) == "__pycache__":
+            return None
+        else:
+            return x
+
+    tar = tarfile.open(file_name, mode="w:gz")
+    for ts in test_sets:
+        tar.add(ts, filter=filter_packages)
+    tar.close()

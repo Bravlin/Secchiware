@@ -1,6 +1,6 @@
-import json, os, requests
+import json, os, requests as rq
 
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from test_utils import get_installed_test_sets
 
 SCRIPT_PATH = os.path.dirname(os.path.abspath(__file__))
@@ -15,14 +15,18 @@ app = Flask(__name__)
 def list_installed_test_sets():
     return jsonify(installed)
 
+@app.route("/test_sets", methods=["POST"])
+def install_test_sets():
+    pass
+
 def connect_to_c2():
     try:
-        resp = requests.post(
+        resp = rq.post(
             config['c2url'] + "/environments",
             json={"ip": config['ip'], "port": config['port']})
         if resp.json()['success']:
             print("Connected successfuly!")
-    except requests.exceptions.ConnectionError as e:
+    except rq.exceptions.ConnectionError as e:
         print("Connection refused.")
 
 if __name__ == "__main__":
@@ -31,4 +35,4 @@ if __name__ == "__main__":
         os.mkdir(TESTS_PATH)
         open(os.path.join(TESTS_PATH, "__init__.py"), "w").close()
     installed = get_installed_test_sets("test_sets")
-    app.run(config['ip'], config['port'], True)
+    app.run(host=config['ip'], port=config['port'], debug=True)

@@ -1,7 +1,14 @@
-import requests as rq
+import json, os, requests as rq
 
 from datetime import datetime
 from flask import abort, Flask, jsonify, request
+from test_utils import get_installed_test_sets
+
+SCRIPT_PATH = os.path.dirname(os.path.abspath(__file__))
+TESTS_PATH = os.path.join(SCRIPT_PATH, "test_sets")
+
+with open(os.path.join(SCRIPT_PATH, "config.json"), "r") as config_file:
+    config = json.load(config_file)
 
 environments = {}
 
@@ -40,5 +47,13 @@ def list_installed_test_sets(ip, port):
         except rq.exceptions.ConnectionError as e:
             abort(500)
 
+@app.route("/test_sets", methods=["GET"])
+def list_available_test_sets():
+    return jsonify(avialable)
+
 if __name__ == "__main__":
-    app.run(debug=True)
+    if not os.path.isdir(TESTS_PATH):
+        os.mkdir(TESTS_PATH)
+        open(os.path.join(TESTS_PATH, "__init__.py"), "w").close()
+    avialable = get_installed_test_sets("test_sets")
+    app.run(host=config['ip'], port=config['port'], debug=True)
