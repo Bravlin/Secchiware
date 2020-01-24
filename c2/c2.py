@@ -33,8 +33,16 @@ def add_environment():
     environments[ip][port] = {
         'session_start': datetime.now().strftime("%Y/%m/%d, %H:%M:%S")
     }
+    environments[ip][port]['info'] = request.json['platform']
 
     return jsonify(success=True)
+
+@app.route("/environments/<ip>/<port>/info", methods=["GET"])
+def get_environment_info(ip, port):
+    if not (ip in environments and port in environments[ip]):
+        abort(400)
+    else:
+        return environments[ip][port]['info']
     
 @app.route("/environments/<ip>/<port>/installed")
 def list_installed_test_sets(ip, port):
