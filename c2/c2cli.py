@@ -12,6 +12,15 @@ def main(c2_ip, c2_port):
     C2_URL = "http://" + C2_IP + ":" + str(C2_PORT)
 
 @main.command()
+def lsavialable():
+    try:
+        resp = requests.get(C2_URL + "/test_sets")
+    except requests.exceptions.ConnectionError as e:
+        print("Connection refused.")
+    else:
+        print(resp.json())
+
+@main.command()
 def lsenv():
     try:
         resp = requests.get(C2_URL + "/environments")

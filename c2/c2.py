@@ -1,4 +1,4 @@
-import json, os, requests as rq
+import json, os, requests as rq, tempfile
 
 from datetime import datetime
 from flask import abort, Flask, jsonify, request
@@ -60,18 +60,16 @@ def install_packages(ip, port):
     elif not (request.json and 'packages' in request.json):
         abort(400)
 
-    file_path = SCRIPT_PATH + "test_sets.tar.gz"
     packages = request.json['packages']
-    compress_test_packages(packages, TESTS_PATH, file_path)
     try:
-        with open(file_path, "rb") as f:
+        with tempfile.SpooledTemporaryFile() as f:
+            compress_test_packages(f, packages, TESTS_PATH)
+            f.seek(0)
             resp = rq.post(
                 "http://" + ip + ":" + port + "/test_sets",
                 files={'packages': f})
     except rq.exceptions.ConnectionError as e:
         abort(500)
-    finally:
-        os.remove(file_path)
     return resp.json()
 
 @app.route("/test_sets", methods=["GET"])

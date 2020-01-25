@@ -1,4 +1,4 @@
-import json, platform, os, requests as rq
+import json, platform, os, requests as rq, tempfile
 
 from flask import abort, Flask, jsonify, request
 from test_utils import get_installed_test_sets, uncompress_test_packages
@@ -20,11 +20,11 @@ def install_test_sets():
     if not (request.files and 'packages' in request.files):
         abort(400)
     
-    f = request.files['packages']
-    file_path = os.path.join(SCRIPT_PATH, f.filename)
-    f.save(file_path)
-    uncompress_test_packages(file_path, TESTS_PATH)
-    os.remove(file_path)
+    packages = request.files['packages']
+    with tempfile.SpooledTemporaryFile() as f:
+        packages.save(f)
+        f.seek(0)
+        uncompress_test_packages(f, TESTS_PATH)
 
     return jsonify(success=True)
 

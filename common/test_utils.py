@@ -78,28 +78,24 @@ def get_installed_test_sets(package_name):
             installed['modules'].append(sub)
     return installed
 
-def compress_test_packages(test_packages, tests_root, file_name):
+def compress_test_packages(file_object, test_packages, tests_root):
     def filter_pycache(x):
         if os.path.basename(x.name) == "__pycache__":
             return None
         else:
             return x
 
-    tar = tarfile.open(file_name, mode="w:gz")
-
-    for tp in test_packages:
-        if len(tp.split(".")) > 1:
-            print(tp + "ignored. Only top level packages allowed.")
-        else:
-            tp_path = os.path.join(tests_root, tp)
-            if os.path.isdir(tp_path):
-                tar.add(tp_path, tp, filter=filter_pycache)
+    with tarfile.open(fileobj=file_object, mode="w:gz") as tar:
+        for tp in test_packages:
+            if len(tp.split(".")) > 1:
+                print(tp + "ignored. Only top level packages allowed.")
             else:
-                print("No package found with name " + tp + ".")
+                tp_path = os.path.join(tests_root, tp)
+                if os.path.isdir(tp_path):
+                    tar.add(tp_path, tp, filter=filter_pycache)
+                else:
+                    print("No package found with name " + tp + ".")
 
-    tar.close()
-
-def uncompress_test_packages(file_path, tests_root):
-    tar = tarfile.open(file_path, mode="r:gz")
-    tar.extractall(tests_root)
-    tar.close()
+def uncompress_test_packages(file_object, tests_root):
+    with tarfile.open(fileobj=file_object, mode="r:gz") as tar:
+        tar.extractall(tests_root)
