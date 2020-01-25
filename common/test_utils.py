@@ -52,7 +52,7 @@ class TestSetCollection():
             ts.run()
 
 
-def get_installed_test_sets(package_name):
+def get_installed_package(package_name):
     installed = {
         'name': package_name.split(".")[-1],
         'subpackages': [],
@@ -63,7 +63,7 @@ def get_installed_test_sets(package_name):
             package.__path__,
             package.__name__ + '.'):
         if is_pkg:
-            sub = get_installed_test_sets(name)
+            sub = get_installed_package(name)
             installed['subpackages'].append(sub)
         else:
             sub = {
@@ -76,6 +76,16 @@ def get_installed_test_sets(package_name):
                 if issubclass(c, TestSet) and c is not TestSet:
                     sub['test_sets'].append(class_name)
             installed['modules'].append(sub)
+    return installed
+
+def get_installed_test_sets(root_package):
+    package = import_module(root_package)
+    installed = []
+    for _, name, is_pkg in iter_modules(
+            package.__path__,
+            package.__name__ + '.'):
+        if is_pkg:
+            installed.append(get_installed_package(name))
     return installed
 
 def compress_test_packages(file_object, test_packages, tests_root):
