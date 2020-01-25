@@ -15,20 +15,37 @@ def main(c2_ip, c2_port):
 def lsenv():
     try:
         resp = requests.get(C2_URL + "/environments")
-        print(resp.json())
     except requests.exceptions.ConnectionError as e:
         print("Connection refused.")
+    else:
+        print(resp.json())
 
 @main.command()
 @click.argument("ip")
 @click.argument("port")
 def lsinstalled(ip, port):
+    url = C2_URL + "/environments/{}/{}/installed".format(ip, port)
     try:
-        url = C2_URL + "/environments/{}/{}/installed"
-        resp = requests.get(url.format(ip, port))
-        print(resp.json())
+        resp = requests.get(url)
     except requests.exceptions.ConnectionError as e:
         print("Connection refused.")
+    else:
+        print(resp.json())
+
+@main.command()
+@click.argument("ip")
+@click.argument("port")
+@click.argument("packages", nargs=-1)
+def install(ip, port, packages):
+    url = C2_URL + "/environments/{}/{}/installed".format(ip, port)
+    try:
+        resp = requests.post(url, json={'packages': packages})
+    except requests.exceptions.ConnectionError as e:
+        print("Connection refused.")
+    else:
+        if not resp.json()['success']:
+            print("Operation failed.")
+
 
 if __name__ == "__main__":
     main()

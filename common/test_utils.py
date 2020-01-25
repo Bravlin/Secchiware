@@ -98,3 +98,8 @@ def compress_test_packages(test_packages, tests_root, file_name):
                 print("No package found with name " + tp + ".")
 
     tar.close()
+
+def uncompress_test_packages(file_path, tests_root):
+    tar = tarfile.open(file_path, mode="r:gz")
+    tar.extractall(tests_root)
+    tar.close()

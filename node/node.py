@@ -1,7 +1,7 @@
 import json, platform, os, requests as rq
 
-from flask import Flask, jsonify, request
-from test_utils import get_installed_test_sets
+from flask import abort, Flask, jsonify, request
+from test_utils import get_installed_test_sets, uncompress_test_packages
 
 SCRIPT_PATH = os.path.dirname(os.path.abspath(__file__))
 TESTS_PATH = os.path.join(SCRIPT_PATH, "test_sets")
@@ -17,7 +17,17 @@ def list_installed_test_sets():
 
 @app.route("/test_sets", methods=["POST"])
 def install_test_sets():
-    pass
+    if not (request.files and 'packages' in request.files):
+        abort(400)
+    
+    f = request.files['packages']
+    file_path = os.path.join(SCRIPT_PATH, f.filename)
+    f.save(file_path)
+    uncompress_test_packages(file_path, TESTS_PATH)
+    os.remove(file_path)
+
+    return jsonify(success=True)
+
 
 def get_platform_info():
     os_info = {}
@@ -49,14 +59,14 @@ def connect_to_c2():
         resp = rq.post(
             config['c2url'] + "/environments",
             json={
-                "ip": config['ip'],
-                "port": config['port'],
-                "platform": get_platform_info()
+                'ip': config['ip'],
+                'port': config['port'],
+                'platform': get_platform_info()
             })
-        if resp.json()['success']:
-            print("Connected successfuly!")
     except rq.exceptions.ConnectionError as e:
         print("Connection refused.")
+    if resp.json()['success']:
+        print("Connected successfuly!")
 
 if __name__ == "__main__":
     connect_to_c2()

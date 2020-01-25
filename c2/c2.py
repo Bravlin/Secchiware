@@ -2,15 +2,13 @@ import json, os, requests as rq
 
 from datetime import datetime
 from flask import abort, Flask, jsonify, request
-from test_utils import get_installed_test_sets
+from test_utils import get_installed_test_sets, compress_test_packages
 
 SCRIPT_PATH = os.path.dirname(os.path.abspath(__file__))
 TESTS_PATH = os.path.join(SCRIPT_PATH, "test_sets")
 
 with open(os.path.join(SCRIPT_PATH, "config.json"), "r") as config_file:
     config = json.load(config_file)
-
-environments = {}
 
 app = Flask(__name__)
 
@@ -20,9 +18,9 @@ def list_environments():
 
 @app.route("/environments", methods=["POST"])
 def add_environment():
-    if (not request.json
-            or not 'ip' in request.json
-            or not 'port' in request.json):
+    if not (request.json
+            and 'ip' in request.json
+            and 'port' in request.json):
         abort(400)
 
     ip = request.json['ip']
@@ -40,20 +38,41 @@ def add_environment():
 @app.route("/environments/<ip>/<port>/info", methods=["GET"])
 def get_environment_info(ip, port):
     if not (ip in environments and port in environments[ip]):
-        abort(400)
-    else:
-        return environments[ip][port]['info']
+        abort(404)
+
+    return environments[ip][port]['info']
     
-@app.route("/environments/<ip>/<port>/installed")
+@app.route("/environments/<ip>/<port>/installed", methods=["GET"])
 def list_installed_test_sets(ip, port):
     if not (ip in environments and port in environments[ip]):
+        abort(404)
+
+    try:
+        resp = rq.get("http://" + ip + ":" + port + "/test_sets")
+    except rq.exceptions.ConnectionError as e:
+        abort(500)
+    return resp.json()
+
+@app.route("/environments/<ip>/<port>/installed", methods=["POST"])
+def install_packages(ip, port):
+    if not (ip in environments and port in environments[ip]):
+        abort(404)
+    elif not (request.json and 'packages' in request.json):
         abort(400)
-    else:
-        try:
-            resp = rq.get("http://" + ip + ":" + port + "/test_sets")
-            return resp.json()
-        except rq.exceptions.ConnectionError as e:
-            abort(500)
+
+    file_path = SCRIPT_PATH + "test_sets.tar.gz"
+    packages = request.json['packages']
+    compress_test_packages(packages, TESTS_PATH, file_path)
+    try:
+        with open(file_path, "rb") as f:
+            resp = rq.post(
+                "http://" + ip + ":" + port + "/test_sets",
+                files={'packages': f})
+    except rq.exceptions.ConnectionError as e:
+        abort(500)
+    finally:
+        os.remove(file_path)
+    return resp.json()
 
 @app.route("/test_sets", methods=["GET"])
 def list_available_test_sets():
@@ -64,4 +83,5 @@ if __name__ == "__main__":
         os.mkdir(TESTS_PATH)
         open(os.path.join(TESTS_PATH, "__init__.py"), "w").close()
     avialable = get_installed_test_sets("test_sets")
+    environments = {}
     app.run(host=config['ip'], port=config['port'], debug=True)
