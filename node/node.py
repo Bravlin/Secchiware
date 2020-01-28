@@ -2,12 +2,7 @@ import json, platform, os, requests as rq, tempfile
 
 from flask import abort, Flask, jsonify, request
 from test_utils import get_installed_test_sets, uncompress_test_packages
-
-SCRIPT_PATH = os.path.dirname(os.path.abspath(__file__))
-TESTS_PATH = os.path.join(SCRIPT_PATH, "test_sets")
-
-with open(os.path.join(SCRIPT_PATH, "config.json"), "r") as config_file:
-    config = json.load(config_file)
+from test_utils import TestSetCollection
 
 app = Flask(__name__)
 
@@ -63,14 +58,25 @@ def connect_to_c2():
                 'platform': get_platform_info()
             })
     except rq.exceptions.ConnectionError as e:
-        print("Connection refused.")
-    if resp.json()['success']:
-        print("Connected successfuly!")
+        return False      
+    return resp.json()['success']
 
 if __name__ == "__main__":
-    connect_to_c2()
+    SCRIPT_PATH = os.path.dirname(os.path.abspath(__file__))
+    TESTS_PATH = os.path.join(SCRIPT_PATH, "test_sets")
+
+    with open(os.path.join(SCRIPT_PATH, "config.json"), "r") as config_file:
+        config = json.load(config_file)
+
     if not os.path.isdir(TESTS_PATH):
         os.mkdir(TESTS_PATH)
         open(os.path.join(TESTS_PATH, "__init__.py"), "w").close()
-    installed = get_installed_test_sets("test_sets")
-    app.run(host=config['ip'], port=config['port'], debug=True)
+
+    if connect_to_c2():
+        print("Connected successfuly!")
+        installed = get_installed_test_sets("test_sets")
+        app.run(host=config['ip'], port=config['port'], debug=True)
+    else:
+        print("Connection refused.")
+        tests = TestSetCollection(["test_sets"])
+        tests.run_all_tests()
