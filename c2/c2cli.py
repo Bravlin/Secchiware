@@ -1,18 +1,15 @@
 import click, requests
 
 @click.group()
-@click.option("--c2-ip", "-i", default="127.0.0.1",
-    help="IP of the Command and Control server.")
-@click.option("--c2-port", "-p", default=5000,
-    help="Port of the Command and Control server.")
-def main(c2_ip, c2_port):
-    global C2_IP, C2_PORT, C2_URL
-    C2_IP = c2_ip
-    C2_PORT = c2_port
-    C2_URL = "http://" + C2_IP + ":" + str(C2_PORT)
+@click.option("--c2-url", "-u", default="http://127.0.0.1:5000",
+    help="URL of the Command and Control server.")
+def main(c2_url):
+    global C2_URL
+    C2_URL = c2_url
 
-@main.command()
+@main.command("lsavailable")
 def lsavialable():
+    """Lists the test sets available at the C&C server."""
     try:
         resp = requests.get(C2_URL + "/test_sets")
     except requests.exceptions.ConnectionError as e:
@@ -20,8 +17,9 @@ def lsavialable():
     else:
         print(resp.json())
 
-@main.command()
+@main.command("lsenv")
 def lsenv():
+    """Lists the environments currently registered at the C&C server."""
     try:
         resp = requests.get(C2_URL + "/environments")
     except requests.exceptions.ConnectionError as e:
@@ -29,10 +27,14 @@ def lsenv():
     else:
         print(resp.json())
 
-@main.command()
+@main.command("lsinstalled")
 @click.argument("ip")
 @click.argument("port")
 def lsinstalled(ip, port):
+    """
+    Lists the currently instaled tests sets
+    in the environment at IP:PORT.
+    """
     url = C2_URL + "/environments/{}/{}/installed".format(ip, port)
     try:
         resp = requests.get(url)
@@ -41,11 +43,12 @@ def lsinstalled(ip, port):
     else:
         print(resp.json())
 
-@main.command()
+@main.command("install")
 @click.argument("ip")
 @click.argument("port")
 @click.argument("packages", nargs=-1)
 def install(ip, port, packages):
+    """Install the given PACKAGES in the environment at IP:PORT."""
     url = C2_URL + "/environments/{}/{}/installed".format(ip, port)
     try:
         resp = requests.post(url, json={'packages': packages})

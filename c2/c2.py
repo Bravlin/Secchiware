@@ -4,11 +4,22 @@ from datetime import datetime
 from flask import abort, Flask, jsonify, request
 from test_utils import get_installed_test_sets, compress_test_packages
 
-SCRIPT_PATH = os.path.dirname(os.path.abspath(__file__))
-TESTS_PATH = os.path.join(SCRIPT_PATH, "test_sets")
+def setup():
+    global SCRIPT_PATH, TESTS_PATH
+    global config, avialable, environments
 
-with open(os.path.join(SCRIPT_PATH, "config.json"), "r") as config_file:
-    config = json.load(config_file)
+    SCRIPT_PATH = os.path.dirname(os.path.abspath(__file__))
+    TESTS_PATH = os.path.join(SCRIPT_PATH, "test_sets")
+
+    with open(os.path.join(SCRIPT_PATH, "config.json"), "r") as config_file:
+        config = json.load(config_file)
+
+    if not os.path.isdir(TESTS_PATH):
+        os.mkdir(TESTS_PATH)
+        open(os.path.join(TESTS_PATH, "__init__.py"), "w").close()
+
+    avialable = get_installed_test_sets("test_sets")
+    environments = {}
 
 app = Flask(__name__)
 
@@ -77,9 +88,5 @@ def list_available_test_sets():
     return jsonify(avialable)
 
 if __name__ == "__main__":
-    if not os.path.isdir(TESTS_PATH):
-        os.mkdir(TESTS_PATH)
-        open(os.path.join(TESTS_PATH, "__init__.py"), "w").close()
-    avialable = get_installed_test_sets("test_sets")
-    environments = {}
+    setup()
     app.run(host=config['ip'], port=config['port'], debug=True)

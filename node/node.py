@@ -28,7 +28,6 @@ def install_test_sets():
 
     return jsonify(success=True)
 
-
 def get_platform_info():
     os_info = {}
     os_info['system'] = platform.system()
