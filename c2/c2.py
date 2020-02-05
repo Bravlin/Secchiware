@@ -2,11 +2,40 @@ import json, os, requests as rq, tempfile
 
 from datetime import datetime
 from flask import abort, Flask, jsonify, request
+from functools import wraps
 from test_utils import get_installed_test_sets, compress_test_packages
+
+SCRIPT_PATH = os.path.dirname(os.path.abspath(__file__))
+TESTS_PATH = os.path.join(SCRIPT_PATH, "test_sets")
+
+with open(os.path.join(SCRIPT_PATH, "config.json"), "r") as config_file:
+    config = json.load(config_file)
+
+if not os.path.isdir(TESTS_PATH):
+    os.mkdir(TESTS_PATH)
+    open(os.path.join(TESTS_PATH, "__init__.py"), "w").close()
+
+avialable = get_installed_test_sets("test_sets")
+environments = {}
 
 app = Flask(__name__)
 
+def client_route(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        response = func(*args, **kwargs)
+        response.headers.add("Access-Control-Allow-Origin", "*")
+        return response
+    
+    return wrapper
+
+@app.route("/", methods=["GET"])
+@client_route
+def is_up():
+    return jsonify(success=True)
+
 @app.route("/environments", methods=["GET"])
+@client_route
 def list_environments():
     return jsonify(environments)
 
@@ -30,6 +59,7 @@ def add_environment():
     return jsonify(success=True)
 
 @app.route("/environments/<ip>/<port>/info", methods=["GET"])
+@client_route
 def get_environment_info(ip, port):
     if not (ip in environments and port in environments[ip]):
         abort(404)
@@ -37,6 +67,7 @@ def get_environment_info(ip, port):
     return environments[ip][port]['info']
     
 @app.route("/environments/<ip>/<port>/installed", methods=["GET"])
+@client_route
 def list_installed_test_sets(ip, port):
     if not (ip in environments and port in environments[ip]):
         abort(404)
@@ -48,6 +79,7 @@ def list_installed_test_sets(ip, port):
     return resp.json()
 
 @app.route("/environments/<ip>/<port>/installed", methods=["POST"])
+@client_route
 def install_packages(ip, port):
     if not (ip in environments and port in environments[ip]):
         abort(404)
@@ -67,21 +99,9 @@ def install_packages(ip, port):
     return resp.json()
 
 @app.route("/test_sets", methods=["GET"])
+@client_route
 def list_available_test_sets():
     return jsonify(avialable)
 
 if __name__ == "__main__":
-    SCRIPT_PATH = os.path.dirname(os.path.abspath(__file__))
-    TESTS_PATH = os.path.join(SCRIPT_PATH, "test_sets")
-
-    with open(os.path.join(SCRIPT_PATH, "config.json"), "r") as config_file:
-        config = json.load(config_file)
-
-    if not os.path.isdir(TESTS_PATH):
-        os.mkdir(TESTS_PATH)
-        open(os.path.join(TESTS_PATH, "__init__.py"), "w").close()
-
-    avialable = get_installed_test_sets("test_sets")
-    environments = {}
-
-    app.run(host=config['ip'], port=config['port'], debug=True)
+    app.run(host=config['IP'], port=config['PORT'], debug=True)
