@@ -64,7 +64,7 @@ def get_environment_info(ip, port):
     if not (ip in environments and port in environments[ip]):
         abort(404)
 
-    return environments[ip][port]['info']
+    return jsonify(environments[ip][port]['info'])
     
 @app.route("/environments/<ip>/<port>/installed", methods=["GET"])
 @client_route
@@ -76,7 +76,7 @@ def list_installed_test_sets(ip, port):
         resp = rq.get("http://" + ip + ":" + port + "/test_sets")
     except rq.exceptions.ConnectionError as e:
         abort(500)
-    return resp.json()
+    return jsonify(resp.json())
 
 @app.route("/environments/<ip>/<port>/installed", methods=["POST"])
 @client_route
@@ -96,7 +96,7 @@ def install_packages(ip, port):
                 files={'packages': f})
     except rq.exceptions.ConnectionError as e:
         abort(500)
-    return resp.json()
+    return jsonify(resp.json())
 
 @app.route("/test_sets", methods=["GET"])
 @client_route
