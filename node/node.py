@@ -12,6 +12,8 @@ def list_installed_test_sets():
 
 @app.route("/test_sets", methods=["POST"])
 def install_test_sets():
+    global installed
+    
     if not (request.files and 'packages' in request.files):
         abort(400)
     
