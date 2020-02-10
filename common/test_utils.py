@@ -8,23 +8,32 @@ from pkgutil import iter_modules, walk_packages
 
 
 def test(func):
-    """Decorator that indicates that the given function is a test."""
+    """Decorator that marks the given function as a test."""
     func.test = True
     return func
+
+def is_test(x):
+    return inspect.isfunction(x) and hasattr(x, 'test')
+
+def is_test_method(x):
+    return inspect.ismethod(x) and hasattr(x, 'test')
 
 
 class TestSet(ABC):
     """Base class that provides a common interface for all test sets."""
 
+    @staticmethod
+    def is_strict_subclass(x):
+        return (inspect.isclass(x)
+            and issubclass(x, TestSet)
+            and x is not TestSet)
+
     def __init__(self, description):
         self.description = description
 
     def run(self):
-        def is_test(x):
-            return inspect.ismethod(x) and hasattr(x, 'test')
-
         """Executes all given tests in the set."""
-        tests = inspect.getmembers(self, is_test)
+        tests = inspect.getmembers(self, is_test_method)
         for _, method in tests:
             method()
 
@@ -51,10 +60,9 @@ class TestSetCollection():
                 package.__name__ + '.'):
             if not is_pkg:
                 module = import_module(name)
-                classes = inspect.getmembers(module, inspect.isclass)
+                classes = inspect.getmembers(module, TestSet.is_strict_subclass)
                 for _, c in classes:
-                    if issubclass(c, TestSet) and c is not TestSet:
-                        self.test_sets.append(c())
+                    self.test_sets.append(c())
 
     def run_all_tests(self):
         for ts in self.test_sets:
@@ -66,16 +74,22 @@ def get_installed_package(package_name):
 
     The returned dictionary contains the following keys:
 
-    'name': the package base name.
+    1. 'name': the package base name.
 
-    'subpackages': a list of dictionaries with a recursive format representing
+    2. 'subpackages': a list of dictionaries with a recursive format representing
     the subpackages found.
 
-    'modules': a list of dictionaries representing the found modules within the
+    3. 'modules': a list of dictionaries representing the found modules within the
     package. They have the following keys:
-        'name': the name of the module.
-        'test_sets': a list with the names of the classes extended from TestSet
-        found in the given module.
+
+    3.1 'name': the name of the module.
+    
+    3.2 'test_sets': a list of dictionaries representing the classes extended from
+    TestSet found in the given module. They contain the following keys:
+    
+    3.2.1 'name': the name of the class.
+    
+    3.2.2 'tests': a list of the names of the test methods found within the class.
 
     Parameters
     ----------
@@ -102,18 +116,22 @@ def get_installed_package(package_name):
             sub = get_installed_package(name)
             installed['subpackages'].append(sub)
         else:
-            sub = {
+            module_info = {
                 'name': name.split(".")[-1], # Basename only
                 'test_sets': []
             }
             module = import_module(name)
-            classes = inspect.getmembers(module, inspect.isclass)
+            classes = inspect.getmembers(module, TestSet.is_strict_subclass)
             for class_name, c in classes:
-                # Only adds a class if it extended from TestSet and it is not
-                # TestSet itself
-                if issubclass(c, TestSet) and c is not TestSet:
-                    sub['test_sets'].append(class_name)
-            installed['modules'].append(sub)
+                class_info = {
+                    'name': class_name,
+                    'tests': []
+                }
+                tests = inspect.getmembers(c, is_test)
+                for test_name, _ in tests:
+                    class_info['tests'].append(test_name)
+                module_info['test_sets'].append(class_info)
+            installed['modules'].append(module_info)
     return installed
 
 def get_installed_test_sets(root_package):
