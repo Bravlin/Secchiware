@@ -7,16 +7,26 @@ from importlib import import_module
 from pkgutil import iter_modules, walk_packages
 
 
+def test(func):
+    """Decorator that indicates that the given function is a test."""
+    func.test = True
+    return func
+
+
 class TestSet(ABC):
     """Base class that provides a common interface for all test sets."""
 
     def __init__(self, description):
         self.description = description
 
-    @abstractmethod
     def run(self):
+        def is_test(x):
+            return inspect.ismethod(x) and hasattr(x, 'test')
+
         """Executes all given tests in the set."""
-        pass
+        tests = inspect.getmembers(self, is_test)
+        for _, method in tests:
+            method()
 
 
 class TestSetCollection():
