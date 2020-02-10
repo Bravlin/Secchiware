@@ -5,20 +5,41 @@ import tarfile
 from abc import ABC, abstractmethod
 from importlib import import_module
 from pkgutil import iter_modules, walk_packages
-from typing import Any, BinaryIO, Callable, List
+from typing import Any, BinaryIO, Callable, List, Optional
 
 
 def test(func: Callable[[], dict]) -> Callable:
     """Decorator that marks the given function as a test."""
+
     func.test = True
     return func
 
 def is_test(x: Any) -> bool:
+    """Return wheter the argument is a test function."""
+
     return inspect.isfunction(x) and hasattr(x, 'test')
 
 def is_test_method(x: Any) -> bool:
+    """Return wheter the argument is a test in the form a method bound to an
+    object."""
+
     return inspect.ismethod(x) and hasattr(x, 'test')
 
+def generate_test_result(
+        test_name: str,
+        test_description: str,
+        result_code: int,
+        additional_info: Optional[dict] = None) -> dict:
+    """Returns a dictionary representing the result of a test."""
+
+    result = {
+        'test_name': test_name,
+        'test_description': test_description,
+        'result_code': result_code,
+    }
+    if additional_info:
+        result['additional_info'] = additional_info
+    return result
 
 class TestSet(ABC):
     """Base class that provides a common interface for all test sets."""
@@ -32,11 +53,13 @@ class TestSet(ABC):
     def __init__(self, description: str):
         self.description = description
 
-    def run(self) -> None:
+    def run(self) -> List[dict]:
         """Executes all given tests in the set."""
+        results = []
         tests = inspect.getmembers(self, is_test_method)
         for _, method in tests:
-            method()
+            results.append(method())
+        return results
 
 
 class TestSetCollection():
@@ -47,7 +70,7 @@ class TestSetCollection():
 
     def load_test_sets(self, test_packages: List[str]) -> None:
         """Recovers all test sets from the given packages."""
-        self.test_sets: TestSet = []
+        self.test_sets: List[TestSet] = []
         for package in test_packages:
             self.get_package(package)
 
@@ -65,9 +88,11 @@ class TestSetCollection():
                 for _, c in classes:
                     self.test_sets.append(c())
 
-    def run_all_tests(self) -> None:
+    def run_all_tests(self) -> List[List[dict]]:
+        results = []
         for ts in self.test_sets:
-            ts.run()
+            results += ts.run()
+        return results
 
 
 def get_installed_package(package_name: str) -> dict:
@@ -167,8 +192,7 @@ def get_installed_test_sets(root_package: str) -> List[dict]:
 def compress_test_packages(
         file_object: BinaryIO,
         test_packages: List[str],
-        tests_root: str
-) -> None:
+        tests_root: str) -> None:
     """Compress the given packages at the root directory for tests.
 
     Only top level packages are allowed, everything else is ignored.

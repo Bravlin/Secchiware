@@ -1,4 +1,4 @@
-from test_utils import TestSet, test
+from test_utils import generate_test_result, TestSet, test
 
 class DummySet(TestSet):
 
@@ -7,4 +7,4 @@ class DummySet(TestSet):
 
     @test
     def dummy(self):
-        print("Dummy loaded correctly!")
+        return generate_test_result("Dummy", "Dummy", 0)
