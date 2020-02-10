@@ -5,14 +5,10 @@ import tarfile
 from abc import ABC, abstractmethod
 from importlib import import_module
 from pkgutil import iter_modules, walk_packages
-from typing import Any, BinaryIO, Callable, Dict, List
-
-TestSetInfo = Dict[str, List[str]]
-ModuleInfo = Dict[str, List[TestSetInfo]]
-PackageInfo = Dict[str, List[ModuleInfo], List['PackageInfo']]
+from typing import Any, BinaryIO, Callable, List
 
 
-def test(func: Callable) -> Callable:
+def test(func: Callable[[], dict]) -> Callable:
     """Decorator that marks the given function as a test."""
     func.test = True
     return func
@@ -74,7 +70,7 @@ class TestSetCollection():
             ts.run()
 
 
-def get_installed_package(package_name: str) -> PackageInfo:
+def get_installed_package(package_name: str) -> dict:
     """Recovers information about the given package.
 
     The returned dictionary contains the following keys:
@@ -104,7 +100,7 @@ def get_installed_package(package_name: str) -> PackageInfo:
 
     Returns
     -------
-    PackageInfo
+    dict
         a dictionary representing the structure of the given package. 
     """
 
@@ -140,7 +136,7 @@ def get_installed_package(package_name: str) -> PackageInfo:
             installed['modules'].append(module_info)
     return installed
 
-def get_installed_test_sets(root_package: str) -> List[PackageInfo]:
+def get_installed_test_sets(root_package: str) -> List[dict]:
     """Recovers information about the installed test sets at the given root
     package.
 
@@ -154,7 +150,7 @@ def get_installed_test_sets(root_package: str) -> List[PackageInfo]:
 
     Returns
     -------
-    List[PackageInfo]
+    List[dict]
         a list whose components are dictionaries representing each of the found
         packages. 
     """
