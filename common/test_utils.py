@@ -5,17 +5,22 @@ import tarfile
 from abc import ABC, abstractmethod
 from importlib import import_module
 from pkgutil import iter_modules, walk_packages
+from typing import Any, BinaryIO, Callable, Dict, List
+
+TestSetInfo = Dict[str, List[str]]
+ModuleInfo = Dict[str, List[TestSetInfo]]
+PackageInfo = Dict[str, List[ModuleInfo], List['PackageInfo']]
 
 
-def test(func):
+def test(func: Callable) -> Callable:
     """Decorator that marks the given function as a test."""
     func.test = True
     return func
 
-def is_test(x):
+def is_test(x: Any) -> bool:
     return inspect.isfunction(x) and hasattr(x, 'test')
 
-def is_test_method(x):
+def is_test_method(x: Any) -> bool:
     return inspect.ismethod(x) and hasattr(x, 'test')
 
 
@@ -23,15 +28,15 @@ class TestSet(ABC):
     """Base class that provides a common interface for all test sets."""
 
     @staticmethod
-    def is_strict_subclass(x):
+    def is_strict_subclass(x: Any) -> bool:
         return (inspect.isclass(x)
             and issubclass(x, TestSet)
             and x is not TestSet)
 
-    def __init__(self, description):
+    def __init__(self, description: str):
         self.description = description
 
-    def run(self):
+    def run(self) -> None:
         """Executes all given tests in the set."""
         tests = inspect.getmembers(self, is_test_method)
         for _, method in tests:
@@ -39,18 +44,18 @@ class TestSet(ABC):
 
 
 class TestSetCollection():
-    """Loads all the tests found in the corresponding package"""
+    """Loads all the tests found in the corresponding packages."""
 
-    def __init__(self, test_packages):
+    def __init__(self, test_packages: List[str]):
         self.load_test_sets(test_packages)
 
-    def load_test_sets(self, test_packages):
+    def load_test_sets(self, test_packages: List[str]) -> None:
         """Recovers all test sets from the given packages."""
-        self.test_sets = []
+        self.test_sets: TestSet = []
         for package in test_packages:
             self.get_package(package)
 
-    def get_package(self, package):
+    def get_package(self, package: str) -> None:
         """Looks for all the test sets in the given package and its
         subpackages."""
         if isinstance(package, str):
@@ -64,32 +69,33 @@ class TestSetCollection():
                 for _, c in classes:
                     self.test_sets.append(c())
 
-    def run_all_tests(self):
+    def run_all_tests(self) -> None:
         for ts in self.test_sets:
             ts.run()
 
 
-def get_installed_package(package_name):
+def get_installed_package(package_name: str) -> PackageInfo:
     """Recovers information about the given package.
 
     The returned dictionary contains the following keys:
 
     1. 'name': the package base name.
 
-    2. 'subpackages': a list of dictionaries with a recursive format representing
-    the subpackages found.
+    2. 'subpackages': a list of dictionaries with a recursive format
+    representing the subpackages found.
 
-    3. 'modules': a list of dictionaries representing the found modules within the
-    package. They have the following keys:
+    3. 'modules': a list of dictionaries representing the found modules within
+    the package. They have the following keys:
 
     3.1 'name': the name of the module.
     
-    3.2 'test_sets': a list of dictionaries representing the classes extended from
-    TestSet found in the given module. They contain the following keys:
+    3.2 'test_sets': a list of dictionaries representing the classes extended
+    from TestSet found in the given module. They contain the following keys:
     
     3.2.1 'name': the name of the class.
     
-    3.2.2 'tests': a list of the names of the test methods found within the class.
+    3.2.2 'tests': a list of the names of the test methods found within the
+    class.
 
     Parameters
     ----------
@@ -98,7 +104,7 @@ def get_installed_package(package_name):
 
     Returns
     -------
-    dictionary
+    PackageInfo
         a dictionary representing the structure of the given package. 
     """
 
@@ -134,7 +140,7 @@ def get_installed_package(package_name):
             installed['modules'].append(module_info)
     return installed
 
-def get_installed_test_sets(root_package):
+def get_installed_test_sets(root_package: str) -> List[PackageInfo]:
     """Recovers information about the installed test sets at the given root
     package.
 
@@ -148,7 +154,7 @@ def get_installed_test_sets(root_package):
 
     Returns
     -------
-    lists
+    List[PackageInfo]
         a list whose components are dictionaries representing each of the found
         packages. 
     """
@@ -162,7 +168,11 @@ def get_installed_test_sets(root_package):
             installed.append(get_installed_package(name))
     return installed
 
-def compress_test_packages(file_object, test_packages, tests_root):
+def compress_test_packages(
+        file_object: BinaryIO,
+        test_packages: List[str],
+        tests_root: str
+) -> None:
     """Compress the given packages at the root directory for tests.
 
     Only top level packages are allowed, everything else is ignored.
@@ -171,9 +181,9 @@ def compress_test_packages(file_object, test_packages, tests_root):
 
     Parameters
     ----------
-    file_object
+    file_object: BinaryIO
         A file like object in which the resulting file is generated.
-    test_packages
+    test_packages: List[str]
         A list of packages names.
     tests_root : str
         The root directory name where the tests sets packages are stored.
@@ -197,14 +207,14 @@ def compress_test_packages(file_object, test_packages, tests_root):
                 else:
                     print("No package found with name " + tp + ".")
 
-def uncompress_test_packages(file_object, tests_root):
+def uncompress_test_packages(file_object: BinaryIO, tests_root: str) -> None:
     """Uncompress the given file in the root directory for tests.
 
     The file must be in gzip format.
 
     Parameters
     ----------
-    file_object
+    file_object: BinaryIO
         A file like object from which the tests sets are extracted.
     tests_root : str
         The root directory name where the extracted packages are going to be
