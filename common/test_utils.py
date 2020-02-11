@@ -4,18 +4,57 @@ import tarfile
 
 from abc import ABC, abstractmethod
 from importlib import import_module
+from functools import wraps
 from pkgutil import iter_modules, walk_packages
-from typing import Any, BinaryIO, Callable, List, Optional
+from typing import Any, BinaryIO, Callable, List, Optional, Tuple, Union
+
+TestResult = Union[int, Tuple[int, dict]]
 
 
-def test(func: Callable[[], dict]) -> Callable:
-    """Decorator that marks the given function as a test."""
+class InvalidTestMethod(Exception):
+    pass
 
-    func.test = True
-    return func
+
+def test(name:str, description: str) -> Callable:
+    """Decorator that marks the given method as a test."""
+
+    def test_decorator(
+            method: Callable[[TestSet], TestResult]) -> Callable:
+        @wraps(method)
+        def wrapper(self: TestSet) -> Callable:
+            report = {}
+            result = method(self)
+
+            if isinstance(result, int):
+                report['result_code'] = result
+            elif not isinstance(result, tuple):
+                raise InvalidTestMethod("Invalid return type.")
+            elif len(result) != 2:
+                raise InvalidTestMethod("Incorrect number of return values.")
+            elif not isinstance(result[0], int):
+                raise InvalidTestMethod("Result code is not an integer.")
+            elif not isinstance(result[1], dict):
+                raise InvalidTestMethod(
+                    "Second return value is not a dictionary.")
+            else:
+                report['result_code'] = result[0]
+                report['additional_info'] = result[1]
+
+            report['test_name'] = name
+            report['test_description'] = description
+            return report
+
+        wrapper.test = True
+        return wrapper
+    
+    return test_decorator
 
 def is_test(x: Any) -> bool:
-    """Return wheter the argument is a test function."""
+    """Return wheter the argument is a test method.
+    
+    Its use is recommended when inspecting a class definition, as there is no
+    instance bound to the method.
+    """
 
     return inspect.isfunction(x) and hasattr(x, 'test')
 
@@ -25,21 +64,6 @@ def is_test_method(x: Any) -> bool:
 
     return inspect.ismethod(x) and hasattr(x, 'test')
 
-def generate_test_result(
-        test_name: str,
-        test_description: str,
-        result_code: int,
-        additional_info: Optional[dict] = None) -> dict:
-    """Returns a dictionary representing the result of a test."""
-
-    result = {
-        'test_name': test_name,
-        'test_description': test_description,
-        'result_code': result_code,
-    }
-    if additional_info:
-        result['additional_info'] = additional_info
-    return result
 
 class TestSet(ABC):
     """Base class that provides a common interface for all test sets."""
@@ -58,7 +82,10 @@ class TestSet(ABC):
         results = []
         tests = inspect.getmembers(self, is_test_method)
         for _, method in tests:
-            results.append(method())
+            try:
+                results.append(method())
+            except InvalidTestMethod as e:
+                print(str(e))
         return results
 
 
