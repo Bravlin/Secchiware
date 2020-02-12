@@ -41,7 +41,8 @@ def lsinstalled(ip, port):
     except requests.exceptions.ConnectionError as e:
         print("Connection refused.")
     else:
-        print(resp.json())
+        for pack in resp.json():
+            print(pack)
 
 @main.command("install")
 @click.argument("ip")
@@ -57,6 +58,20 @@ def install(ip, port, packages):
     else:
         if not resp.json()['success']:
             print("Operation failed.")
+
+@main.command("execute_all")
+@click.argument("ip")
+@click.argument("port")
+def execute_all_in_env(ip, port):
+    """Execute all tests at the environment at IP:PORT."""
+    url = C2_URL + "/environments/{}/{}/report".format(ip, port)
+    try:
+        resp = requests.get(url)
+    except requests.exceptions.ConnectionError as e:
+        print("Connection refused.")
+    else:
+        for report in resp.json():
+            print(report)
 
 
 if __name__ == "__main__":

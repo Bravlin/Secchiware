@@ -26,6 +26,11 @@ def install_test_sets():
     installed = get_installed_test_sets("test_sets")
     return jsonify(success=True)
 
+@app.route("/report", methods=["GET"])
+def execute_all_tests():
+    tests = TestSetCollection(["test_sets"])
+    return jsonify(tests.run_all_tests())
+
 def get_platform_info():
     os_info = {}
     os_info['system'] = platform.system()

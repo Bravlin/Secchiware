@@ -98,6 +98,18 @@ def install_packages(ip, port):
         abort(500)
     return jsonify(resp.json())
 
+@app.route("/environments/<ip>/<port>/report", methods=["GET"])
+@client_route
+def execute_all_in_env(ip, port):
+    if not (ip in environments and port in environments[ip]):
+        abort(404)
+    
+    try:
+        resp = rq.get("http://" + ip + ":" + port + "/report")
+    except rq.exceptions.ConnectionError as e:
+        abort(500)
+    return jsonify(resp.json())
+
 @app.route("/test_sets", methods=["GET"])
 @client_route
 def list_available_test_sets():
