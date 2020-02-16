@@ -15,7 +15,7 @@ class InvalidTestMethod(Exception):
     pass
 
 
-def test(name:str, description: str) -> Callable:
+def test(name: str, description: str) -> Callable:
     """Decorator that marks the given method as a test."""
 
     def test_decorator(
@@ -254,7 +254,7 @@ def compress_test_packages(
                 else:
                     print("No package found with name " + tp + ".")
 
-def uncompress_test_packages(file_object: BinaryIO, tests_root: str) -> None:
+def uncompress_test_packages(file_object: BinaryIO, tests_root: str) -> List[str]:
     """Uncompress the given file in the root directory for tests.
 
     The file must be in gzip format.
@@ -268,5 +268,20 @@ def uncompress_test_packages(file_object: BinaryIO, tests_root: str) -> None:
         stored.
     """
 
+    def member_is_package(tar: tarfile.TarFile, member: tarfile.TarInfo):
+        try:
+            tar.getmember(f"{member.name}/__init__.py")
+            return True
+        except KeyError:
+            return False
+
+    new_packages = []
     with tarfile.open(fileobj=file_object, mode="r:gz") as tar:
+        for member in tar:
+            if member.name.count("/") == 0:
+                if not (member.isdir() and member_is_package(tar, member)):
+                    raise ValueError(
+                        f"Found top level member {member} is not a package.")
+                new_packages.append(member.name)
         tar.extractall(tests_root)
+    return new_packages

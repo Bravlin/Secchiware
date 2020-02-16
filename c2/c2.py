@@ -1,9 +1,9 @@
-import json, os, requests as rq, tempfile
+import json, os, requests as rq, tempfile, test_utils
 
+from custom_collections import OrderedListOfDict
 from datetime import datetime
 from flask import abort, Flask, jsonify, request
 from functools import wraps
-from test_utils import get_installed_test_sets, compress_test_packages
 
 SCRIPT_PATH = os.path.dirname(os.path.abspath(__file__))
 TESTS_PATH = os.path.join(SCRIPT_PATH, "test_sets")
@@ -15,7 +15,12 @@ if not os.path.isdir(TESTS_PATH):
     os.mkdir(TESTS_PATH)
     open(os.path.join(TESTS_PATH, "__init__.py"), "w").close()
 
-avialable = get_installed_test_sets("test_sets")
+available = OrderedListOfDict('name', str)
+for pack in test_utils.get_installed_test_sets("test_sets"):
+    try:
+        available.insert(pack)
+    except Exception as e:
+        print(str(e))
 environments = {}
 
 app = Flask(__name__)
@@ -74,7 +79,7 @@ def list_installed_test_sets(ip, port):
 
     try:
         resp = rq.get(f"http://{ip}:{port}/test_sets")
-    except rq.exceptions.ConnectionError as e:
+    except rq.exceptions.ConnectionError:
         abort(500)
     return jsonify(resp.json())
 
@@ -89,12 +94,12 @@ def install_packages(ip, port):
     packages = request.json['packages']
     try:
         with tempfile.SpooledTemporaryFile() as f:
-            compress_test_packages(f, packages, TESTS_PATH)
+            test_utils.compress_test_packages(f, packages, TESTS_PATH)
             f.seek(0)
             resp = rq.post(
                 f"http://{ip}:{port}/test_sets",
                 files={'packages': f})
-    except rq.exceptions.ConnectionError as e:
+    except rq.exceptions.ConnectionError:
         abort(500)
     return jsonify(resp.json())
 
@@ -106,14 +111,38 @@ def execute_all_in_env(ip, port):
     
     try:
         resp = rq.get(f"http://{ip}:{port}/report")
-    except rq.exceptions.ConnectionError as e:
+    except rq.exceptions.ConnectionError:
         abort(500)
     return jsonify(resp.json())
 
 @app.route("/test_sets", methods=["GET"])
 @client_route
 def list_available_test_sets():
-    return jsonify(avialable)
+    return jsonify(available.content)
+
+@app.route("/test_sets", methods=["POST"])
+@client_route
+def upload_test_sets():
+    global available
+
+    if not (request.files and 'packages' in request.files):
+        abort(400)
+    
+    packages = request.files['packages']
+    with tempfile.SpooledTemporaryFile() as f:
+        packages.save(f)
+        f.seek(0)
+        try:
+            new_packages = test_utils.uncompress_test_packages(f, TESTS_PATH)
+        except Exception as e:
+            print(str(e))
+            abort(400)
+
+    for new_pack in new_packages:
+        available.insert(
+            test_utils.get_installed_package(f"test_sets.{new_pack}"))
+    return jsonify(success=True)
+
 
 if __name__ == "__main__":
     app.run(host=config['IP'], port=config['PORT'], debug=True)

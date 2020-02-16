@@ -1,4 +1,4 @@
-import click, requests
+import click, os, requests
 
 def print_package(pack: dict, level: int, ident: str):
     base_ident = ident * level
@@ -41,19 +41,38 @@ def lsavialable():
     """Lists the test sets available at the C&C server."""
     try:
         resp = requests.get(f"{C2_URL}/test_sets")
-    except requests.exceptions.ConnectionError as e:
+    except requests.exceptions.ConnectionError:
         print("Connection refused.")
     else:
         for pack in resp.json():
             print_package(pack, 0, " " * 2)
             print()
 
+@main.command("upload")
+@click.argument("file_path")
+def upload_compressed_packages(file_path: str):
+    if not os.path.isfile(file_path):
+        print("Given path does not exists or is not a file.")
+    elif not file_path.endswith(".tar.gz"):
+        print("Only .tar.gz extension allowed.")
+    else:
+        try:
+            with open(file_path, "rb") as f:
+                resp = requests.post(
+                    f"{C2_URL}/test_sets",
+                    files={'packages': f})
+            resp.raise_for_status()
+        except requests.exceptions.ConnectionError:
+            print("Connection refused.")
+        except Exception as e:
+            print(str(e))
+
 @main.command("lsenv")
 def lsenv():
     """Lists the environments currently registered at the C&C server."""
     try:
         resp = requests.get(f"{C2_URL}/environments")
-    except requests.exceptions.ConnectionError as e:
+    except requests.exceptions.ConnectionError:
         print("Connection refused.")
     else:
         envs = resp.json()
@@ -72,7 +91,7 @@ def lsinstalled(ip, port):
     url = f"{C2_URL}/environments/{ip}/{port}/installed"
     try:
         resp = requests.get(url)
-    except requests.exceptions.ConnectionError as e:
+    except requests.exceptions.ConnectionError:
         print("Connection refused.")
     else:
         for pack in resp.json():
@@ -88,7 +107,7 @@ def install(ip, port, packages):
     url = f"{C2_URL}/environments/{ip}/{port}/installed"
     try:
         resp = requests.post(url, json={'packages': packages})
-    except requests.exceptions.ConnectionError as e:
+    except requests.exceptions.ConnectionError:
         print("Connection refused.")
     else:
         if not resp.json()['success']:
@@ -102,7 +121,7 @@ def execute_all_in_env(ip, port):
     url = f"{C2_URL}/environments/{ip}/{port}/report"
     try:
         resp = requests.get(url)
-    except requests.exceptions.ConnectionError as e:
+    except requests.exceptions.ConnectionError:
         print("Connection refused.")
     else:
         for report in resp.json():
