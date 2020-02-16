@@ -73,7 +73,7 @@ def list_installed_test_sets(ip, port):
         abort(404)
 
     try:
-        resp = rq.get("http://" + ip + ":" + port + "/test_sets")
+        resp = rq.get(f"http://{ip}:{port}/test_sets")
     except rq.exceptions.ConnectionError as e:
         abort(500)
     return jsonify(resp.json())
@@ -92,7 +92,7 @@ def install_packages(ip, port):
             compress_test_packages(f, packages, TESTS_PATH)
             f.seek(0)
             resp = rq.post(
-                "http://" + ip + ":" + port + "/test_sets",
+                f"http://{ip}:{port}/test_sets",
                 files={'packages': f})
     except rq.exceptions.ConnectionError as e:
         abort(500)
@@ -105,7 +105,7 @@ def execute_all_in_env(ip, port):
         abort(404)
     
     try:
-        resp = rq.get("http://" + ip + ":" + port + "/report")
+        resp = rq.get(f"http://{ip}:{port}/report")
     except rq.exceptions.ConnectionError as e:
         abort(500)
     return jsonify(resp.json())

