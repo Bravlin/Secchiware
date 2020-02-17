@@ -1,16 +1,15 @@
-import json, platform, os, requests as rq, tempfile
+import json, platform, os, requests as rq, shutil, tempfile, test_utils
 
+from custom_collections import OrderedListOfDict
 from flask import abort, Flask, jsonify, request
-from test_utils import get_installed_test_sets, uncompress_test_packages
-from test_utils import TestSetCollection
 
 app = Flask(__name__)
 
 @app.route("/test_sets", methods=["GET"])
 def list_installed_test_sets():
-    return jsonify(installed)
+    return jsonify(installed.content)
 
-@app.route("/test_sets", methods=["POST"])
+@app.route("/test_sets", methods=["PATCH"])
 def install_test_sets():
     global installed
     
@@ -21,14 +20,34 @@ def install_test_sets():
     with tempfile.SpooledTemporaryFile() as f:
         packages.save(f)
         f.seek(0)
-        uncompress_test_packages(f, TESTS_PATH)
+        try:
+            new_packages = test_utils.uncompress_test_packages(f, TESTS_PATH)
+        except Exception as e:
+            print(str(e))
+            abort(400)
+    
+    new_info = []
+    for new_pack in new_packages:
+        new_info.append(
+            test_utils.get_installed_package(f"test_sets.{new_pack}"))
+    installed.batch_insert(new_info)
+    return jsonify(success=True)
 
-    installed = get_installed_test_sets("test_sets")
+@app.route("/test_sets/<package>", methods=["DELETE"])
+def delete_package(package):
+    global installed
+
+    package_path = os.path.join(TESTS_PATH, package)
+    if not os.path.isdir(package_path):
+        abort(404)
+
+    shutil.rmtree(package_path)
+    installed.delete(package)
     return jsonify(success=True)
 
 @app.route("/report", methods=["GET"])
 def execute_all_tests():
-    tests = TestSetCollection(["test_sets"])
+    tests = test_utils.TestSetCollection(["test_sets"])
     return jsonify(tests.run_all_tests())
 
 def get_platform_info():
@@ -64,10 +83,12 @@ def connect_to_c2():
                 'ip': config['ip'],
                 'port': config['port'],
                 'platform': get_platform_info()
-            })
+            }
+        )
     except rq.exceptions.ConnectionError:
         return False      
     return resp.json()['success']
+
 
 if __name__ == "__main__":
     SCRIPT_PATH = os.path.dirname(os.path.abspath(__file__))
@@ -82,9 +103,13 @@ if __name__ == "__main__":
 
     if connect_to_c2():
         print("Connected successfuly!")
-        installed = get_installed_test_sets("test_sets")
+        installed = OrderedListOfDict('name', str)
+        try:
+            installed.content = test_utils.get_installed_test_sets("test_sets")
+        except Exception as e:
+            print(str(e))
         app.run(host=config['ip'], port=config['port'], debug=True)
     else:
         print("Connection refused.")
-        tests = TestSetCollection(["test_sets"])
+        tests = test_utils.TestSetCollection(["test_sets"])
         tests.run_all_tests()

@@ -16,11 +16,10 @@ if not os.path.isdir(TESTS_PATH):
     open(os.path.join(TESTS_PATH, "__init__.py"), "w").close()
 
 available = OrderedListOfDict('name', str)
-for pack in test_utils.get_installed_test_sets("test_sets"):
-    try:
-        available.insert(pack)
-    except Exception as e:
-        print(str(e))
+try:
+    available.content = test_utils.get_installed_test_sets("test_sets")
+except Exception as e:
+    print(str(e))
 environments = {}
 
 app = Flask(__name__)
@@ -83,7 +82,7 @@ def list_installed_test_sets(ip, port):
         abort(500)
     return jsonify(resp.json())
 
-@app.route("/environments/<ip>/<port>/installed", methods=["POST"])
+@app.route("/environments/<ip>/<port>/installed", methods=["PATCH"])
 @client_route
 def install_packages(ip, port):
     if not (ip in environments and port in environments[ip]):
@@ -96,9 +95,22 @@ def install_packages(ip, port):
         with tempfile.SpooledTemporaryFile() as f:
             test_utils.compress_test_packages(f, packages, TESTS_PATH)
             f.seek(0)
-            resp = rq.post(
+            resp = rq.patch(
                 f"http://{ip}:{port}/test_sets",
-                files={'packages': f})
+                files={'packages': f}
+            )
+    except rq.exceptions.ConnectionError:
+        abort(500)
+    return jsonify(resp.json())
+
+@app.route("/environments/<ip>/<port>/installed/<package>", methods=["DELETE"])
+@client_route
+def delete_installed_package(ip, port, package):
+    if not (ip in environments and port in environments[ip]):
+        abort(404)
+
+    try:
+        resp = rq.delete(f"http://{ip}:{port}/test_sets/{package}")
     except rq.exceptions.ConnectionError:
         abort(500)
     return jsonify(resp.json())
@@ -138,14 +150,16 @@ def upload_test_sets():
             print(str(e))
             abort(400)
 
+    new_info = []
     for new_pack in new_packages:
-        available.insert(
+        new_info.append(
             test_utils.get_installed_package(f"test_sets.{new_pack}"))
+    available.batch_insert(new_info)
     return jsonify(success=True)
 
 @app.route("/test_sets/<package>", methods=["DELETE"])
 @client_route
-def delete_test_set(package):
+def delete_package(package):
     global available
 
     package_path = os.path.join(TESTS_PATH, package)

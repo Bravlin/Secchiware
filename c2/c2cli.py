@@ -120,12 +120,26 @@ def install(ip, port, packages):
     """Install the given PACKAGES in the environment at IP:PORT."""
     url = f"{C2_URL}/environments/{ip}/{port}/installed"
     try:
-        resp = requests.post(url, json={'packages': packages})
+        resp = requests.patch(url, json={'packages': packages})
     except requests.exceptions.ConnectionError:
         print("Connection refused.")
     else:
         if not resp.json()['success']:
             print("Operation failed.")
+
+@main.command("uninstall")
+@click.argument("ip")
+@click.argument("port")
+@click.argument("packages", nargs=-1)
+def uninstall(ip, port, packages):
+    for pack in packages:
+        try:
+            resp = requests.delete(f"{C2_URL}/environments/{ip}/{port}/installed/{pack}")
+            resp.raise_for_status()
+        except requests.exceptions.ConnectionError:
+            print("Connection refused.")
+        except Exception as e:
+            print(str(e))
 
 @main.command("execute_all")
 @click.argument("ip")
