@@ -1,4 +1,4 @@
-import json, os, requests as rq, tempfile, test_utils
+import json, os, requests as rq, shutil, tempfile, test_utils
 
 from custom_collections import OrderedListOfDict
 from datetime import datetime
@@ -120,7 +120,7 @@ def execute_all_in_env(ip, port):
 def list_available_test_sets():
     return jsonify(available.content)
 
-@app.route("/test_sets", methods=["POST"])
+@app.route("/test_sets", methods=["PATCH"])
 @client_route
 def upload_test_sets():
     global available
@@ -141,6 +141,19 @@ def upload_test_sets():
     for new_pack in new_packages:
         available.insert(
             test_utils.get_installed_package(f"test_sets.{new_pack}"))
+    return jsonify(success=True)
+
+@app.route("/test_sets/<package>", methods=["DELETE"])
+@client_route
+def delete_test_set(package):
+    global available
+
+    package_path = os.path.join(TESTS_PATH, package)
+    if not os.path.isdir(package_path):
+        abort(404)
+
+    shutil.rmtree(package_path)
+    available.delete(package)
     return jsonify(success=True)
 
 

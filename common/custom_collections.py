@@ -58,4 +58,4 @@ class OrderedListOfDict():
         index = self.index_of(key_value)
         if index < 0:
             raise KeyError()
-        del self._sort_key[index]
+        del self._ordered_list[index]

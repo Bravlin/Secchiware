@@ -1,5 +1,7 @@
 import click, os, requests
 
+from typing import List
+
 def print_package(pack: dict, level: int, ident: str):
     base_ident = ident * level
     print(f"{base_ident}{pack['name']}")
@@ -58,9 +60,21 @@ def upload_compressed_packages(file_path: str):
     else:
         try:
             with open(file_path, "rb") as f:
-                resp = requests.post(
+                resp = requests.patch(
                     f"{C2_URL}/test_sets",
                     files={'packages': f})
+            resp.raise_for_status()
+        except requests.exceptions.ConnectionError:
+            print("Connection refused.")
+        except Exception as e:
+            print(str(e))
+
+@main.command("remove")
+@click.argument("packages", nargs=-1)
+def remove_available_packages(packages: List[str]):
+    for pack in packages:
+        try:
+            resp = requests.delete(f"{C2_URL}/test_sets/{pack}")
             resp.raise_for_status()
         except requests.exceptions.ConnectionError:
             print("Connection refused.")
