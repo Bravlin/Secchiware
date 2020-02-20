@@ -92,16 +92,38 @@ class TestSet(ABC):
 class TestSetCollection():
     """Loads all the tests found in the corresponding packages."""
 
-    def __init__(self, test_packages: List[str]):
-        self.load_test_sets(test_packages)
+    def __init__(self,
+            tests_root: str,
+            packages: List[str] = [],
+            modules: List[str] = [],
+            test_sets: List[str] = []):
+        self.tests_root = tests_root
+        if packages or modules or test_sets:
+            self.load_entities(packages, modules, test_sets)
+        else:
+            self.test_sets: List[TestSet] = []
+            self.load_package(self.tests_root)
 
-    def load_test_sets(self, test_packages: List[str]) -> None:
+    def load_entities(
+            self,
+            packages: List[str] = [],
+            modules: List[str] = [],
+            test_sets: List[str] = []) -> None:
         """Recovers all test sets from the given packages."""
-        self.test_sets: List[TestSet] = []
-        for package in test_packages:
-            self.get_package(package)
 
-    def get_package(self, package: str) -> None:
+        self.test_sets: List[TestSet] = []
+        
+        for package in packages:
+            self.load_package(f"{self.tests_root}.{package}")
+        
+        for module in modules:
+            self.load_module(f"{self.tests_root}.{module}")
+
+        for ts in test_sets:
+            module, c = ts.rsplit(".", 1)
+            self.load_test_set(f"{self.tests_root}.{module}", c)
+
+    def load_package(self, package: str) -> None:
         """Looks for all the test sets in the given package and its
         subpackages."""
         if isinstance(package, str):
@@ -110,10 +132,21 @@ class TestSetCollection():
                 package.__path__,
                 package.__name__ + '.'):
             if not is_pkg:
-                module = import_module(name)
-                classes = inspect.getmembers(module, TestSet.is_strict_subclass)
-                for _, c in classes:
-                    self.test_sets.append(c())
+                self.load_module(name)
+
+    def load_module(self, module: str) -> None:
+        mod = import_module(module)
+        classes = inspect.getmembers(mod, TestSet.is_strict_subclass)
+        for _, c in classes:
+            self.test_sets.append(c())
+
+    def load_test_set(self, module: str, test_set: str):
+        mod = import_module(module)
+        c = getattr(mod, test_set)
+        if TestSet.is_strict_subclass(c):
+            self.test_sets.append(c())
+        else:
+            raise ValueError(f"{test_set} is not a valid class.")
 
     def run_all_tests(self) -> List[List[dict]]:
         results = []

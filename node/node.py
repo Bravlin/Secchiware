@@ -48,7 +48,7 @@ def delete_package(package):
 
 @app.route("/report", methods=["GET"])
 def execute_all_tests():
-    tests = test_utils.TestSetCollection(["test_sets"])
+    tests = test_utils.TestSetCollection("test_sets")
     return jsonify(tests.run_all_tests())
 
 def get_platform_info():
@@ -126,5 +126,5 @@ if __name__ == "__main__":
         app.run(host=config['ip'], port=config['port'], debug=False)
     else:
         print("Connection refused.")
-        tests = test_utils.TestSetCollection(["test_sets"])
+        tests = test_utils.TestSetCollection("test_sets")
         tests.run_all_tests()
