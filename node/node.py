@@ -1,4 +1,5 @@
-import json, platform, os, requests as rq, shutil, tempfile, test_utils
+import json, platform, os, requests as rq
+import signal, shutil, sys, tempfile, test_utils
 
 from custom_collections import OrderedListOfDict
 from flask import abort, Flask, jsonify, request
@@ -89,6 +90,18 @@ def connect_to_c2():
         return False      
     return resp.json()['success']
 
+def exit_gracefully(sig, frame):
+    print("Exiting...")
+    try:
+        resp = rq.delete(
+            f"{config['c2url']}/environments/{config['ip']}/{config['port']}")
+        resp.raise_for_status()
+    except rq.exceptions.ConnectionError:
+        print("Could not contact Command and Control server before exiting.")
+    except Exception as e:
+        print(str(e))
+    finally:
+        sys.exit()
 
 if __name__ == "__main__":
     SCRIPT_PATH = os.path.dirname(os.path.abspath(__file__))
@@ -102,13 +115,15 @@ if __name__ == "__main__":
         open(os.path.join(TESTS_PATH, "__init__.py"), "w").close()
 
     if connect_to_c2():
+        signal.signal(signal.SIGTERM, exit_gracefully)
+        signal.signal(signal.SIGINT, exit_gracefully)
         print("Connected successfuly!")
         installed = OrderedListOfDict('name', str)
         try:
             installed.content = test_utils.get_installed_test_sets("test_sets")
         except Exception as e:
             print(str(e))
-        app.run(host=config['ip'], port=config['port'], debug=True)
+        app.run(host=config['ip'], port=config['port'], debug=False)
     else:
         print("Connection refused.")
         tests = test_utils.TestSetCollection(["test_sets"])

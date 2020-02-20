@@ -62,6 +62,19 @@ def add_environment():
 
     return jsonify(success=True)
 
+@app.route("/environments/<ip>/<port>", methods=["DELETE"])
+def remove_environment(ip, port):
+    global environments
+
+    if not (ip in environments and port in environments[ip]):
+        abort(404)
+    
+    del environments[ip][port]
+    if not environments[ip]:
+        del environments[ip]
+    
+    return jsonify(success=True)
+
 @app.route("/environments/<ip>/<port>/info", methods=["GET"])
 @client_route
 def get_environment_info(ip, port):
