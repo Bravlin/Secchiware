@@ -156,6 +156,34 @@ def execute_all_in_env(ip, port):
             print_test_report(report, " " * 2)
             print()
 
+@main.command("execute_selected")
+@click.argument("ip")
+@click.argument("port")
+@click.option("--package", "-p", multiple=True)
+@click.option("--module", "-m", multiple=True)
+@click.option("--test_set", "-t", multiple=True)
+def execute_selected_entities(ip, port, package, module, test_set):
+    selected = {}
+    if package:
+        selected['packages'] = package
+    if module:
+        selected['modules'] = module
+    if test_set:
+        selected['test_sets'] = test_set
+
+    try:
+        resp = requests.post(
+            f"{C2_URL}/environments/{ip}/{port}/report",
+            json=selected)
+        resp.raise_for_status()
+    except requests.exceptions.ConnectionError:
+            print("Connection refused.")
+    except Exception as e:
+        print(str(e))
+    else:
+        for report in resp.json():
+            print_test_report(report, " " * 2)
+            print()
 
 if __name__ == "__main__":
     main()

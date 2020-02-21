@@ -51,6 +51,33 @@ def execute_all_tests():
     tests = test_utils.TestSetCollection("test_sets")
     return jsonify(tests.run_all_tests())
 
+@app.route("/report", methods=["POST"])
+def execute_specified_entities():
+    if not (request.json
+            and ('packages' in request.json
+                or 'modules' in request.json
+                or 'test_sets' in request.json)):
+        abort(400)
+    
+    if 'packages' in request.json:
+        packs = request.json['packages']
+    else:
+        packs = []
+    
+    if 'modules' in request.json:
+        mods = request.json['modules']
+    else:
+        mods = []
+
+    if 'test_sets' in request.json:
+        tsets = request.json['test_sets']
+    else:
+        tsets = []
+
+    tests = test_utils.TestSetCollection("test_sets", packs, mods, tsets)
+    return jsonify(tests.run_all_tests())
+
+
 def get_platform_info():
     os_info = {}
     os_info['system'] = platform.system()

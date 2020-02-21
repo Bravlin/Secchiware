@@ -140,6 +140,23 @@ def execute_all_in_env(ip, port):
         abort(500)
     return jsonify(resp.json())
 
+@app.route("/environments/<ip>/<port>/report", methods=["POST"])
+@client_route
+def execute_selected_entities(ip, port):
+    if not (ip in environments and port in environments[ip]):
+        abort(404)
+    elif not (request.json
+            and ('packages' in request.json
+                or 'modules' in request.json
+                or 'test_sets' in request.json)):
+        abort(400)
+    
+    try:
+        resp = rq.post(f"http://{ip}:{port}/report", json=request.json)
+    except rq.exceptions.ConnectionError:
+        abort(500)
+    return jsonify(resp.json())
+
 @app.route("/test_sets", methods=["GET"])
 @client_route
 def list_available_test_sets():
