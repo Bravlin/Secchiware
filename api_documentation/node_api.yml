@@ -1,0 +1,174 @@
+openapi: '3.0.2'
+
+info:
+  title: Secchiware Node API
+  version: '1.0'
+  description: RESTful API expected by a Secchiware Command and Control Server to communicate with a node executing in an analysis environment
+
+servers:
+  - url: '{protocol}://{ip}:{port}'
+    variables:
+      protocol:
+        enum:
+          - http
+          - https
+        default: http
+      ip:
+        default: '127.0.0.1'
+        description: IP configured for the application
+      port:
+        default: '4900'
+        description: Port configured for the application
+
+components:
+  schemas:
+    TestReport:
+      type: object
+      properties:
+        test_name:
+          type: string
+        test_description:
+          type: string
+        result_code:
+          type: integer
+        additional_info:
+          type: object
+          additionalProperties: true
+      required:
+        - test_name
+        - test_description
+        - result_code
+    TestsPackageInfo:
+      type: object
+      properties:
+        name:
+          type: string
+        subpackages:
+          type: array
+          items:
+            $ref: '#/components/schemas/TestsPackageInfo'
+          uniqueItems: true
+        modules:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              test_sets:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    name:
+                      type: string
+                    tests:
+                      type: array
+                      items:
+                        type: string
+                      uniqueItems: true
+                  required:
+                    - name
+                uniqueItems: true
+            required:
+              - name
+          uniqueItems: true
+      required:
+        - name
+
+paths:
+  /test_sets:
+    get:
+      summary: Get all installed root packages in the node.
+      description: Returns a list of recursive informative representations of all installed packages.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TestsPackageInfo'
+                uniqueItems: true
+    patch:
+      summary: Upload new packages or update existing ones.
+      description: Endpoint to upload packages from a compressed file.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                packages:
+                  type: string
+                  format: binary
+              required:
+                - packages
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+        '400':
+          description: Bad file
+  /test_sets/{package}:
+    delete:
+      summary: Deletes a package
+      description: Removes the given root package (including all its content) from the node.
+      parameters:
+      - in: path
+        name: package
+        required: true
+        schema:
+          type: string
+        description: The root package name.
+      responses:
+        '204':
+          description: Package deleted successfully
+        '404':
+          description: Package not found
+  /report:
+    get:
+      summary: Execute tests installed in the node and returns the corresponding report.
+      description: >
+        If packages, modules or test_sets parameters are given, only the corresponding tests contained within them are executed.
+        If there is no parameter, all tests installed in the node ara executed.
+      parameters:
+        - in: query
+          name: packages
+          schema: 
+            type: array
+            items:
+              type: string
+          description: The canonical names of the packages to be executed entirely.
+        - in: query
+          name: modules
+          schema: 
+            type: array
+            items:
+              type: string
+          description: The canonical names of the modules to be executed entirely.
+        - in: query
+          name: test_sets
+          schema: 
+            type: array
+            items:
+              type: string
+          description: The canonical names of the test sets to be executed.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TestReport'
+                uniqueItems: true

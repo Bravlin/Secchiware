@@ -152,6 +152,6 @@ if __name__ == "__main__":
             print(str(e))
         app.run(host=config['ip'], port=config['port'], debug=False)
     else:
-        print("Connection refused.")
+        print("Connection refused.\n\nExecuting installed tests...\n\n")
         tests = test_utils.TestSetCollection("test_sets")
-        tests.run_all_tests()
+        print(json.dumps(tests.run_all_tests()))
