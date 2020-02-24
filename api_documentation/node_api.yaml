@@ -139,7 +139,7 @@ paths:
       summary: Execute tests installed in the node and returns the corresponding report.
       description: >
         If packages, modules or test_sets parameters are given, only the corresponding tests contained within them are executed.
-        If there is no parameter, all tests installed in the node ara executed.
+        If there is no parameter, all tests installed in the node are executed.
       parameters:
         - in: query
           name: packages
