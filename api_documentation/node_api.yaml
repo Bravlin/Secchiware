@@ -22,22 +22,13 @@ servers:
 
 components:
   schemas:
-    TestReport:
+    HTTPError:
       type: object
       properties:
-        test_name:
+        error:
           type: string
-        test_description:
-          type: string
-        result_code:
-          type: integer
-        additional_info:
-          type: object
-          additionalProperties: true
       required:
-        - test_name
-        - test_description
-        - result_code
+        - error
     TestsPackageInfo:
       type: object
       properties:
@@ -75,8 +66,77 @@ components:
           uniqueItems: true
       required:
         - name
+    TestReport:
+      type: object
+      properties:
+        test_name:
+          type: string
+        test_description:
+          type: string
+        result_code:
+          type: integer
+        additional_info:
+          type: object
+          additionalProperties: true
+      required:
+        - test_name
+        - test_description
+        - result_code
 
 paths:
+  /report:
+    get:
+      summary: Execute tests installed in the node and returns the corresponding report.
+      description: >
+        If packages, modules or test_sets parameters are given, only the corresponding tests contained within them are executed.
+        If there is no parameter, all tests installed in the node are executed.
+      parameters:
+        - in: query
+          name: packages
+          schema: 
+            type: string
+          description: The canonical names of the packages to be executed entirely separated by commas.
+          style: form
+          explode: false
+          allowReserved: true
+        - in: query
+          name: modules
+          schema: 
+            type: string
+          description: The canonical names of the modules to be executed entirely separated by commas.
+          style: form
+          explode: false
+          allowReserved: true
+        - in: query
+          name: test_sets
+          schema: 
+            type: string
+          description: The canonical names of the test sets to be executed separated by commas.
+          style: form
+          explode: false
+          allowReserved: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TestReport'
+                uniqueItems: true
+                example:
+                  - test_name: foo
+                    test_description: bar
+                    result_code: 0
+                    additional_info:
+                      - some_key: value
+        '400':
+          description: Invalid query parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPError'
   /test_sets:
     get:
       summary: Get all installed root packages in the node.
@@ -91,6 +151,20 @@ paths:
                 items:
                   $ref: '#/components/schemas/TestsPackageInfo'
                 uniqueItems: true
+                example:
+                  - name: foo_package
+                    modules:
+                      - name: foo_module
+                        test_sets:
+                          name: FooSet
+                          tests: ['foo', 'bar']
+                    subpackages:
+                      - name: foo_subpackage
+                        modules:
+                        - name: foo_submodule
+                          test_sets:
+                            name: FooSubSet
+                            tests: ['subfoo', 'sub_bar']
     patch:
       summary: Upload new packages or update existing ones.
       description: Endpoint to upload packages from a compressed file.
@@ -111,7 +185,17 @@ paths:
         '204':
           description: File correctly uncompressed and packages added or updated accordingly
         '400':
-          description: Bad file
+          description: Invalid request's content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPError'
+        '415':
+          description: Invalid request's content type
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPError'
   /test_sets/{package}:
     delete:
       summary: Deletes a package
@@ -128,41 +212,7 @@ paths:
           description: Package deleted successfully
         '404':
           description: Package not found
-  /report:
-    get:
-      summary: Execute tests installed in the node and returns the corresponding report.
-      description: >
-        If packages, modules or test_sets parameters are given, only the corresponding tests contained within them are executed.
-        If there is no parameter, all tests installed in the node are executed.
-      parameters:
-        - in: query
-          name: packages
-          schema: 
-            type: array
-            items:
-              type: string
-          description: The canonical names of the packages to be executed entirely.
-        - in: query
-          name: modules
-          schema: 
-            type: array
-            items:
-              type: string
-          description: The canonical names of the modules to be executed entirely.
-        - in: query
-          name: test_sets
-          schema: 
-            type: array
-            items:
-              type: string
-          description: The canonical names of the test sets to be executed.
-      responses:
-        '200':
-          description: OK
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/TestReport'
-                uniqueItems: true
+                $ref: '#/components/schemas/HTTPError'

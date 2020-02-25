@@ -1,0 +1,239 @@
+openapi: '3.0.2'
+
+info:
+  title: Secchiware Command and Control Server API
+  version: '1.0'
+  description: RESTful API expected by a Secchiware Node or Client to communicate with a centralized server
+
+servers:
+  - url: '{protocol}://{ip}:{port}'
+    variables:
+      protocol:
+        enum:
+          - http
+          - https
+        default: http
+      ip:
+        default: '127.0.0.1'
+        description: IP configured for the application
+      port:
+        default: '5000'
+        description: Port configured for the application
+
+components:
+  schemas:
+    EnvironmentPlatformInformation:
+      type: object
+      properties:
+        platform:
+          type: string
+        node:
+          type: string
+        os:
+          type: object
+          properties:
+            system:
+              type: string
+            release:
+              type: string
+            version:
+              type: string
+          required:
+            - system
+            - release
+            - version
+        hardware:
+          type: object
+          properties:
+            machine:
+              type: string
+            processor:
+              type: string
+          required:
+            - machine
+            - processor
+        python:
+          type: object
+          properties:
+            build:
+              type: string
+            compiler:
+              type: string
+            implementation:
+              type: string
+            version:
+              type: string
+          required:
+            - buid
+            - compiler
+            - implementation
+            - version
+      required:
+        - platform
+        - compiler
+        - implementation
+        - version
+    HTTPError:
+      $ref: 'node_api.yaml#/components/schemas/HTTPError'
+    TestsPackageInfo:
+      $ref: 'node_api.yaml#/components/schemas/TestsPackageInfo'
+  parameters:
+    environmentIP:
+      in: path
+      name: ip
+      required: true
+      schema:
+        type: string
+      description: The ip of a registered environment.
+    environmentPort:
+      in: path
+      name: port
+      required: true
+      schema:
+        type: string
+      description: The port of a registered environment.
+  responses:
+    404EnvironmentNotFound:
+      description: No environment registered at the given ip and port
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/HTTPError'
+    504EnvironmentUnresponsive:
+      description: The requested environment could not be reached
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/HTTPError'
+
+paths:
+  /environments:
+    get:
+      summary: List all currently active environments.
+      description: Get information about all currently active environments registered at the C&C server.  
+      responses:
+        '200':
+          description: OK
+          headers:
+            Access-Control-Allow-Origin:
+              schema:
+                type: string
+              description: Provides cross origin access to the specified domain
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: object
+                  additionalProperties:
+                    type: object
+                    properties:
+                      session_start:
+                        type: string
+                        format: custom_date
+                      info:
+                        $ref: '#/components/schemas/EnvironmentPlatformInformation'
+    post:
+      summary: Endpoint that allows a node to register itself.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                ip:
+                  type: string
+                port:
+                  type: string
+                info:
+                  $ref: '#/components/schemas/EnvironmentPlatformInformation'
+              required:
+                - ip
+                - port
+                - info
+      responses:
+        '204':
+          description: Environment registered successfully
+        '415':
+          description: Content type is not application/json
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPError'
+  /environments/{ip}/{port}:
+    delete:
+      summary: Allows the node at ip:port to unregister itself.
+      parameters:
+        - $ref: '#/components/parameters/environmentIP'
+        - $ref: '#/components/parameters/environmentPort'
+      responses:
+        '204':
+          description: Environment removed successfully
+        '404':
+          $ref: '#/components/responses/404EnvironmentNotFound'
+  /environments/{ip}/{port}/info:
+    get:
+      summary: Recovers information about the platform of the environment at ip:port.
+      parameters:
+        - $ref: '#/components/parameters/environmentIP'
+        - $ref: '#/components/parameters/environmentPort'
+      responses:
+        '200':
+          description: OK
+          headers:
+            Access-Control-Allow-Origin:
+              schema:
+                type: string
+              description: Provides cross origin access to the specified domain
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvironmentPlatformInformation'
+        '404':
+          $ref: '#/components/responses/404EnvironmentNotFound'
+  /environments/{ip}/{port}/installed:
+    get:
+      summary: Get all installed root packages in the environment at ip:port
+      parameters:
+        - $ref: '#/components/parameters/environmentIP'
+        - $ref: '#/components/parameters/environmentPort'
+      responses:
+        '200':
+          description: OK
+          headers:
+            Access-Control-Allow-Origin:
+              schema:
+                type: string
+              description: Provides cross origin access to the specified domain
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TestsPackageInfo'
+                uniqueItems: true
+        '404':
+          $ref: '#/components/responses/404EnvironmentNotFound'
+    patch:
+      summary: Upload new packages or update existing ones to the environment at ip:port.
+      parameters:
+        - $ref: '#/components/parameters/environmentIP'
+        - $ref: '#/components/parameters/environmentPort'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: string
+              description: A list of the root packages names to transfer from the C&C server to the specified node.
+      responses:
+        '204':
+          description: Packages transferred or updated successfully
+        '404':
+          $ref: '#/components/responses/404EnvironmentNotFound'
+        '504':
+          $ref: '#/components/responses/504EnvironmentUnresponsive'
+          

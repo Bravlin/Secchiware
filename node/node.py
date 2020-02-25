@@ -2,20 +2,34 @@ import json, platform, os, requests as rq
 import signal, shutil, sys, tempfile, test_utils
 
 from custom_collections import OrderedListOfDict
-from flask import abort, Flask, jsonify, request
+from flask import abort, Flask, jsonify, request, Response
 
 app = Flask(__name__)
 
+@app.errorhandler(400)
+def bad_request(e):
+    return jsonify(error=str(e)), 400
+
+@app.errorhandler(404)
+def not_found(e):
+    return jsonify(error=str(e)), 404
+
+@app.errorhandler(415)
+def unsupported_media_type(e):
+    return jsonify(error=str(e)), 415
+
 @app.route("/test_sets", methods=["GET"])
 def list_installed_test_sets():
-    return jsonify(installed.content), 200
+    return jsonify(installed.content)
 
 @app.route("/test_sets", methods=["PATCH"])
 def install_test_sets():
     global installed
     
+    if not request.mimetype == 'multipart/form-data':
+        abort(415, description="Invalid request's content type")
     if not (request.files and 'packages' in request.files):
-        abort(400)
+        abort(400, description="Invalid request's content")
     
     packages = request.files['packages']
     with tempfile.SpooledTemporaryFile() as f:
@@ -25,14 +39,14 @@ def install_test_sets():
             new_packages = test_utils.uncompress_test_packages(f, TESTS_PATH)
         except Exception as e:
             print(str(e))
-            abort(400)
+            abort(400, description="Invalid request's content")
     
     new_info = []
     for new_pack in new_packages:
         new_info.append(
             test_utils.get_installed_package(f"test_sets.{new_pack}"))
     installed.batch_insert(new_info)
-    return jsonify(), 204
+    return Response(status=204, mimetype="application/json")
 
 @app.route("/test_sets/<package>", methods=["DELETE"])
 def delete_package(package):
@@ -40,11 +54,11 @@ def delete_package(package):
 
     package_path = os.path.join(TESTS_PATH, package)
     if not os.path.isdir(package_path):
-        abort(404)
+        abort(404, description="Package not found")
 
     shutil.rmtree(package_path)
     installed.delete(package)
-    return jsonify(), 204
+    return Response(status=204, mimetype="application/json")
 
 @app.route("/report", methods=["GET"])
 def execute_tests():
@@ -54,7 +68,7 @@ def execute_tests():
         valid_keys = {'packages', 'modules', 'test_sets'}
         params = request.args
         if set(params.keys()) - valid_keys:
-            abort(400)
+            abort(400, "Invalid query parameters")
         else:
             packages = params.get('packages', "")
             packages = packages.split(",") if packages else []
