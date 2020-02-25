@@ -93,6 +93,7 @@ def list_installed_test_sets(ip, port):
         resp = rq.get(f"http://{ip}:{port}/test_sets")
     except rq.exceptions.ConnectionError:
         abort(500)
+
     return jsonify(resp.json())
 
 @app.route("/environments/<ip>/<port>/installed", methods=["PATCH"])
@@ -108,13 +109,14 @@ def install_packages(ip, port):
         with tempfile.SpooledTemporaryFile() as f:
             test_utils.compress_test_packages(f, packages, TESTS_PATH)
             f.seek(0)
-            resp = rq.patch(
+            rq.patch(
                 f"http://{ip}:{port}/test_sets",
                 files={'packages': f}
             )
     except rq.exceptions.ConnectionError:
         abort(500)
-    return jsonify(resp.json())
+
+    return app.response_class(status=204, mimetype="application/json")
 
 @app.route("/environments/<ip>/<port>/installed/<package>", methods=["DELETE"])
 @client_route
@@ -123,36 +125,28 @@ def delete_installed_package(ip, port, package):
         abort(404)
 
     try:
-        resp = rq.delete(f"http://{ip}:{port}/test_sets/{package}")
+        rq.delete(f"http://{ip}:{port}/test_sets/{package}")
     except rq.exceptions.ConnectionError:
         abort(500)
-    return jsonify(resp.json())
+
+    return app.response_class(status=204, mimetype="application/json")
 
 @app.route("/environments/<ip>/<port>/report", methods=["GET"])
 @client_route
-def execute_all_in_env(ip, port):
+def execute_tests(ip, port):
     if not (ip in environments and port in environments[ip]):
         abort(404)
     
-    try:
-        resp = rq.get(f"http://{ip}:{port}/report")
-    except rq.exceptions.ConnectionError:
-        abort(500)
-    return jsonify(resp.json())
+    url = f"http://{ip}:{port}/report"
+    if request.args:
+        valid_keys = {'packages', 'modules', 'test_sets'}
+        if set(request.args.keys()) - valid_keys:
+            abort(400)
+        else:
+            url += f"?{request.query_string.decode()}"
 
-@app.route("/environments/<ip>/<port>/report", methods=["POST"])
-@client_route
-def execute_selected_entities(ip, port):
-    if not (ip in environments and port in environments[ip]):
-        abort(404)
-    elif not (request.json
-            and ('packages' in request.json
-                or 'modules' in request.json
-                or 'test_sets' in request.json)):
-        abort(400)
-    
     try:
-        resp = rq.post(f"http://{ip}:{port}/report", json=request.json)
+        resp = rq.get(url)
     except rq.exceptions.ConnectionError:
         abort(500)
     return jsonify(resp.json())

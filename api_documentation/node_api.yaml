@@ -3,7 +3,7 @@ openapi: '3.0.2'
 info:
   title: Secchiware Node API
   version: '1.0'
-  description: RESTful API expected by a Secchiware Command and Control Server to communicate with a node executing in an analysis environment
+  description: RESTful API expected by a Secchiware Command and Control Server to communicate with a node executing in an analysis environment.
 
 servers:
   - url: '{protocol}://{ip}:{port}'
@@ -104,18 +104,12 @@ paths:
                 packages:
                   type: string
                   format: binary
+                  description: File in tar.gz format
               required:
                 - packages
       responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
+        '204':
+          description: File correctly uncompressed and packages added or updated accordingly
         '400':
           description: Bad file
   /test_sets/{package}:

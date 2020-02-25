@@ -8,7 +8,7 @@ app = Flask(__name__)
 
 @app.route("/test_sets", methods=["GET"])
 def list_installed_test_sets():
-    return jsonify(installed.content)
+    return jsonify(installed.content), 200
 
 @app.route("/test_sets", methods=["PATCH"])
 def install_test_sets():
@@ -32,7 +32,7 @@ def install_test_sets():
         new_info.append(
             test_utils.get_installed_package(f"test_sets.{new_pack}"))
     installed.batch_insert(new_info)
-    return jsonify(success=True)
+    return jsonify(), 204
 
 @app.route("/test_sets/<package>", methods=["DELETE"])
 def delete_package(package):
@@ -44,39 +44,34 @@ def delete_package(package):
 
     shutil.rmtree(package_path)
     installed.delete(package)
-    return jsonify(success=True)
+    return jsonify(), 204
 
 @app.route("/report", methods=["GET"])
-def execute_all_tests():
-    tests = test_utils.TestSetCollection("test_sets")
-    return jsonify(tests.run_all_tests())
+def execute_tests():
+    if not request.args:
+        tests = test_utils.TestSetCollection("test_sets")
+    else:
+        valid_keys = {'packages', 'modules', 'test_sets'}
+        params = request.args
+        if set(params.keys()) - valid_keys:
+            abort(400)
+        else:
+            packages = params.get('packages', "")
+            packages = packages.split(",") if packages else []
+            modules = params.get('modules', "")
+            modules = modules.split(",") if modules else []
+            test_sets = params.get('test_sets', "")
+            test_sets = test_sets.split(",") if test_sets else []
 
-@app.route("/report", methods=["POST"])
-def execute_specified_entities():
-    if not (request.json
-            and ('packages' in request.json
-                or 'modules' in request.json
-                or 'test_sets' in request.json)):
-        abort(400)
+            print(modules)
+
+        tests = test_utils.TestSetCollection(
+            "test_sets",
+            packages,
+            modules,
+            test_sets)
     
-    if 'packages' in request.json:
-        packs = request.json['packages']
-    else:
-        packs = []
-    
-    if 'modules' in request.json:
-        mods = request.json['modules']
-    else:
-        mods = []
-
-    if 'test_sets' in request.json:
-        tsets = request.json['test_sets']
-    else:
-        tsets = []
-
-    tests = test_utils.TestSetCollection("test_sets", packs, mods, tsets)
     return jsonify(tests.run_all_tests())
-
 
 def get_platform_info():
     os_info = {}
@@ -150,7 +145,7 @@ if __name__ == "__main__":
             installed.content = test_utils.get_installed_test_sets("test_sets")
         except Exception as e:
             print(str(e))
-        app.run(host=config['ip'], port=config['port'], debug=False)
+        app.run(host=config['ip'], port=config['port'], debug=True)
     else:
         print("Connection refused.\n\nExecuting installed tests...\n\n")
         tests = test_utils.TestSetCollection("test_sets")

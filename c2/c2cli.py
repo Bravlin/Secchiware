@@ -121,11 +121,11 @@ def install(ip, port, packages):
     url = f"{C2_URL}/environments/{ip}/{port}/installed"
     try:
         resp = requests.patch(url, json={'packages': packages})
+        resp.raise_for_status()
     except requests.exceptions.ConnectionError:
         print("Connection refused.")
-    else:
-        if not resp.json()['success']:
-            print("Operation failed.")
+    except Exception as e:
+        print(str(e))
 
 @main.command("uninstall")
 @click.argument("ip")
@@ -141,40 +141,25 @@ def uninstall(ip, port, packages):
         except Exception as e:
             print(str(e))
 
-@main.command("execute_all")
-@click.argument("ip")
-@click.argument("port")
-def execute_all_in_env(ip, port):
-    """Execute all tests at the environment at IP:PORT."""
-    url = f"{C2_URL}/environments/{ip}/{port}/report"
-    try:
-        resp = requests.get(url)
-    except requests.exceptions.ConnectionError:
-        print("Connection refused.")
-    else:
-        for report in resp.json():
-            print_test_report(report, " " * 2)
-            print()
-
-@main.command("execute_selected")
+@main.command("execute_tests")
 @click.argument("ip")
 @click.argument("port")
 @click.option("--package", "-p", multiple=True)
 @click.option("--module", "-m", multiple=True)
 @click.option("--test_set", "-t", multiple=True)
-def execute_selected_entities(ip, port, package, module, test_set):
-    selected = {}
+def execute_tests(ip, port, package, module, test_set):
+    query = ""
     if package:
-        selected['packages'] = package
+        query += f"&packages={','.join(package)}"
     if module:
-        selected['modules'] = module
+        query += f"&modules={','.join(module)}"
     if test_set:
-        selected['test_sets'] = test_set
+        query += f"&test_set={','.join(test_set)}"
+    query = query.replace("&", "?", 1)
 
     try:
-        resp = requests.post(
-            f"{C2_URL}/environments/{ip}/{port}/report",
-            json=selected)
+        resp = requests.get(
+            f"{C2_URL}/environments/{ip}/{port}/report{query}")
         resp.raise_for_status()
     except requests.exceptions.ConnectionError:
             print("Connection refused.")
