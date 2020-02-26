@@ -82,11 +82,36 @@ components:
         - test_name
         - test_description
         - result_code
+  examples:
+    testPackageInfoListExample:
+      value:
+        - name: foo_package
+          modules:
+            - name: foo_module
+              test_sets:
+                name: FooSet
+                tests: ['foo', 'bar']
+          subpackages:
+            - name: foo_subpackage
+              modules:
+              - name: foo_submodule
+                test_sets:
+                  name: FooSubSet
+                  tests: ['subfoo', 'sub_bar']
+      summary: A sample list containing a single root package representation
+    testReportListExample:
+      value:
+        - test_name: foo
+          test_description: bar
+          result_code: 0
+          additional_info:
+            - some_key: value
+      summary: A sample list containing a single test report
 
 paths:
   /report:
     get:
-      summary: Execute tests installed in the node and returns the corresponding report.
+      summary: Executes tests installed in the node and returns the corresponding report.
       description: >
         If packages, modules or test_sets parameters are given, only the corresponding tests contained within them are executed.
         If there is no parameter, all tests installed in the node are executed.
@@ -125,12 +150,9 @@ paths:
                 items:
                   $ref: '#/components/schemas/TestReport'
                 uniqueItems: true
-                example:
-                  - test_name: foo
-                    test_description: bar
-                    result_code: 0
-                    additional_info:
-                      - some_key: value
+              examples:
+                testReportListExample:
+                  $ref: '#/components/examples/testReportListExample'
         '400':
           description: Invalid query parameters
           content:
@@ -139,7 +161,7 @@ paths:
                 $ref: '#/components/schemas/HTTPError'
   /test_sets:
     get:
-      summary: Get all installed root packages in the node.
+      summary: Gets all installed root packages in the node.
       description: Returns a list of recursive informative representations of all installed packages.
       responses:
         '200':
@@ -151,22 +173,11 @@ paths:
                 items:
                   $ref: '#/components/schemas/TestsPackageInfo'
                 uniqueItems: true
-                example:
-                  - name: foo_package
-                    modules:
-                      - name: foo_module
-                        test_sets:
-                          name: FooSet
-                          tests: ['foo', 'bar']
-                    subpackages:
-                      - name: foo_subpackage
-                        modules:
-                        - name: foo_submodule
-                          test_sets:
-                            name: FooSubSet
-                            tests: ['subfoo', 'sub_bar']
+              examples:
+                testPackageInfoListExample:
+                  $ref: '#/components/examples/testPackageInfoListExample'
     patch:
-      summary: Upload new packages or update existing ones.
+      summary: Uploads new packages or updates existing ones.
       description: Endpoint to upload packages from a compressed file.
       requestBody:
         required: true
