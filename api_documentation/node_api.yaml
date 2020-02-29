@@ -66,6 +66,20 @@ components:
           uniqueItems: true
       required:
         - name
+      example:
+        name: foo_package
+        modules:
+          - name: foo_module
+            test_sets:
+              name: FooSet
+              tests: ['foo', 'bar']
+        subpackages:
+          - name: foo_subpackage
+            modules:
+            - name: foo_submodule
+              test_sets:
+                name: FooSubSet
+                tests: ['subfoo', 'sub_bar']
     TestReport:
       type: object
       properties:
@@ -82,31 +96,12 @@ components:
         - test_name
         - test_description
         - result_code
-  examples:
-    testPackageInfoListExample:
-      value:
-        - name: foo_package
-          modules:
-            - name: foo_module
-              test_sets:
-                name: FooSet
-                tests: ['foo', 'bar']
-          subpackages:
-            - name: foo_subpackage
-              modules:
-              - name: foo_submodule
-                test_sets:
-                  name: FooSubSet
-                  tests: ['subfoo', 'sub_bar']
-      summary: A sample list containing a single root package representation
-    testReportListExample:
-      value:
-        - test_name: foo
-          test_description: bar
-          result_code: 0
-          additional_info:
-            - some_key: value
-      summary: A sample list containing a single test report
+      example:
+        test_name: foo
+        test_description: bar
+        result_code: 0
+        additional_info:
+          - some_key: value
 
 paths:
   /report:
@@ -124,6 +119,16 @@ paths:
           style: form
           explode: false
           allowReserved: true
+          examples:
+            topPackage:
+              value: some_package
+              summary: A top level package
+            subpackage:
+              value: some_package.subpackage
+              summary: A child package
+            list:
+              value: some_package,other_package
+              summary: Comma separated packages
         - in: query
           name: modules
           schema: 
@@ -132,6 +137,16 @@ paths:
           style: form
           explode: false
           allowReserved: true
+          examples:
+            simpleCase:
+              value: some_package.some_module
+              summary: A module contained in a package
+            moduleInSubpackage:
+              value: some_package.subpackage.a_module
+              summary: A module contained in a subpackage
+            list:
+              value: some_package.some_module,some_package.other_module,other_package.a_module
+              summary: Comma separated modules
         - in: query
           name: test_sets
           schema: 
@@ -140,6 +155,16 @@ paths:
           style: form
           explode: false
           allowReserved: true
+          examples:
+            simpleCase:
+              value: some_package.some_module.SomeTestSet
+              summary: A test set contained in a module
+            moduleInSubpackage:
+              value: some_package.subpackage.a_module.ATestSet
+              summary: A test set from a module in a subpackage
+            list:
+              value: some_package.some_module.SomeTestSet,other_package.subpackage.a_module.OtherTestSet
+              summary: Comma separated test sets
       responses:
         '200':
           description: OK
@@ -150,9 +175,6 @@ paths:
                 items:
                   $ref: '#/components/schemas/TestReport'
                 uniqueItems: true
-              examples:
-                testReportListExample:
-                  $ref: '#/components/examples/testReportListExample'
         '400':
           description: Invalid query parameters
           content:
@@ -173,9 +195,6 @@ paths:
                 items:
                   $ref: '#/components/schemas/TestsPackageInfo'
                 uniqueItems: true
-              examples:
-                testPackageInfoListExample:
-                  $ref: '#/components/examples/testPackageInfoListExample'
     patch:
       summary: Uploads new packages or updates existing ones.
       description: Endpoint to upload packages from a compressed file.
@@ -218,6 +237,7 @@ paths:
         schema:
           type: string
         description: The root package name.
+        example: a_package
       responses:
         '204':
           description: Package deleted successfully

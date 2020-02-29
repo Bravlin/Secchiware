@@ -56,7 +56,11 @@ components:
           type: object
           properties:
             build:
-              type: string
+              type: array
+              minLength: 2
+              maxLength: 2
+              items:
+                type: string
             compiler:
               type: string
             implementation:
@@ -73,6 +77,23 @@ components:
         - compiler
         - implementation
         - version
+      example:
+        platform: Linux-3.13.0-55-generic-x86_64-with-Ubuntu-14.04-trusty
+        node: MyMachine
+        os:
+          system: Linux
+          release: 3.13.0-55-generic
+          version: '#94-Ubuntu SMP Thu Jun 18 00:27:10 UTC 2015'
+        hardware:
+          machine: x86_64
+          processor: x86_64
+        python:
+          build:
+            - default
+            - Nov  7 2018 10:44:02
+          compiler: GCC 8.3.0
+          implementation: CPython
+          version: 3.6.9
     HTTPError:
       $ref: 'node_api.yaml#/components/schemas/HTTPError'
     TestsPackageInfo:
@@ -87,6 +108,7 @@ components:
       schema:
         type: string
       description: The ip of a registered environment.
+      example: 192.168.0.14
     environmentPort:
       in: path
       name: port
@@ -94,9 +116,18 @@ components:
       schema:
         type: string
       description: The port of a registered environment.
+      example: 5100
+    topPackage:
+      $ref: 'node_api.yaml#/paths/~1test_sets~1{package}/delete/parameters/0'
   responses:
     404ResourceNotFound:
       description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/HTTPError'
+    415UnsupportedMediaType:
+      description: Format of the request's payload is not supported
       content:
         application/json:
           schema:
@@ -107,11 +138,6 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/HTTPError'
-  examples:
-    testPackageInfoListExample:
-      $ref: 'node_api.yaml#/components/examples/testPackageInfoListExample'
-    testReportListExample:
-      $ref: 'node_api.yaml#/components/examples/testReportListExample'
 
 paths:
   /environments:
@@ -140,6 +166,27 @@ paths:
                         format: custom_date
                       info:
                         $ref: '#/components/schemas/EnvironmentPlatformInformation'
+              example:
+                192.168.0.14:
+                  5100:
+                    session_start: 2020/02/02, 20:20:20
+                    info:
+                      platform: Linux-3.13.0-55-generic-x86_64-with-Ubuntu-14.04-trusty
+                      node: MyMachine
+                      os:
+                        system: Linux
+                        release: 3.13.0-55-generic
+                        version: '#94-Ubuntu SMP Thu Jun 18 00:27:10 UTC 2015'
+                      hardware:
+                        machine: x86_64
+                        processor: x86_64
+                      python:
+                        build:
+                          - default
+                          - Nov  7 2018 10:44:02
+                        compiler: GCC 8.3.0
+                        implementation: CPython
+                        version: 3.6.9
     post:
       summary: Endpoint that allows a node to register itself.
       requestBody:
@@ -151,8 +198,10 @@ paths:
               properties:
                 ip:
                   type: string
+                  example: 192.168.0.14
                 port:
                   type: string
+                  example: 5100
                 info:
                   $ref: '#/components/schemas/EnvironmentPlatformInformation'
               required:
@@ -163,11 +212,7 @@ paths:
         '204':
           description: Environment registered successfully
         '415':
-          description: Content type is not application/json
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPError'
+          $ref: '#/components/responses/415UnsupportedMediaType'
   /environments/{ip}/{port}:
     delete:
       summary: Allows the node at ip:port to unregister itself.
@@ -236,11 +281,14 @@ paths:
               items:
                 type: string
               description: A list of the root packages names to transfer from the C&C server to the specified node.
+              example: [some_package, other_package]
       responses:
         '204':
           description: Packages transferred or updated successfully
         '404':
           $ref: '#/components/responses/404ResourceNotFound'
+        '415':
+          $ref: '#/components/responses/415UnsupportedMediaType'
         '504':
           $ref: '#/components/responses/504EnvironmentUnresponsive'
   /environments/{ip}/{port}/installed/{package}:
@@ -249,12 +297,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/environmentIP'
         - $ref: '#/components/parameters/environmentPort'
-        - in: path
-          name: package
-          required: true
-          schema:
-            type: string
-          description: The desired package.
+        - $ref: '#/components/parameters/topPackage'
       responses:
         '204':
           description: Package uninstalled successfully
@@ -285,9 +328,6 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/TestReport'
-              examples:
-                testReportListExample:
-                  $ref: '#/components/examples/testReportListExample'
         '400':
           description: Invalid query parameters
           content:
@@ -317,6 +357,41 @@ paths:
                   items:
                     $ref: '#/components/schemas/TestsPackageInfo'
                   uniqueItems: true
-                examples:
-                  testPackageInfoListExample:
-                    $ref: '#/components/examples/testPackageInfoListExample'
+    patch:
+      summary: Uploads new packages to the repository or updates existing ones.
+      description: Endpoint to upload packages from a compressed file.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                packages:
+                  type: string
+                  format: binary
+                  description: File in tar.gz format
+              required:
+                - packages
+      responses:
+        '204':
+          description: File correctly uncompressed and packages added or updated accordingly
+        '400':
+          description: Invalid request's content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPError'
+        '415':
+          $ref: '#/components/responses/415UnsupportedMediaType'
+  /test_sets/{package}:
+    delete:
+      summary: Deletes a package
+      description: Removes the given root package (including all its content) from the repository.
+      parameters:
+        - $ref: '#/components/parameters/topPackage'
+      responses:
+        '204':
+          description: Package deleted successfully
+        '404':
+          $ref: '#/components/responses/404ResourceNotFound'
