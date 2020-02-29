@@ -105,8 +105,11 @@ def lsinstalled(ip, port):
     url = f"{C2_URL}/environments/{ip}/{port}/installed"
     try:
         resp = requests.get(url)
+        resp.raise_for_status()
     except requests.exceptions.ConnectionError:
         print("Connection refused.")
+    except Exception:
+        print(resp.json()['error'])
     else:
         for pack in resp.json():
             print_package(pack, 0, " " * 2)
@@ -120,7 +123,7 @@ def install(ip, port, packages):
     """Install the given PACKAGES in the environment at IP:PORT."""
     url = f"{C2_URL}/environments/{ip}/{port}/installed"
     try:
-        resp = requests.patch(url, json={'packages': packages})
+        resp = requests.patch(url, json=packages)
         resp.raise_for_status()
     except requests.exceptions.ConnectionError:
         print("Connection refused.")

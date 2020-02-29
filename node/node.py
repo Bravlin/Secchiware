@@ -124,7 +124,7 @@ def connect_to_c2():
         )
     except rq.exceptions.ConnectionError:
         return False      
-    return resp.json()['success']
+    return resp.status_code == 204
 
 def exit_gracefully(sig, frame):
     print("Exiting...")
@@ -134,8 +134,8 @@ def exit_gracefully(sig, frame):
         resp.raise_for_status()
     except rq.exceptions.ConnectionError:
         print("Could not contact Command and Control server before exiting.")
-    except Exception as e:
-        print(str(e))
+    except Exception:
+        print(resp.json()['error'])
     finally:
         sys.exit()
 
@@ -159,7 +159,7 @@ if __name__ == "__main__":
             installed.content = test_utils.get_installed_test_sets("test_sets")
         except Exception as e:
             print(str(e))
-        app.run(host=config['ip'], port=config['port'], debug=True)
+        app.run(host=config['ip'], port=config['port'], debug=False)
     else:
         print("Connection refused.\n\nExecuting installed tests...\n\n")
         tests = test_utils.TestSetCollection("test_sets")

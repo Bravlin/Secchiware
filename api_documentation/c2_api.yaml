@@ -202,7 +202,7 @@ paths:
                 port:
                   type: string
                   example: 5100
-                info:
+                platform:
                   $ref: '#/components/schemas/EnvironmentPlatformInformation'
               required:
                 - ip
@@ -211,6 +211,12 @@ paths:
       responses:
         '204':
           description: Environment registered successfully
+        '400':
+          description: Invalid request's content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPError'
         '415':
           $ref: '#/components/responses/415UnsupportedMediaType'
   /environments/{ip}/{port}:
@@ -267,6 +273,8 @@ paths:
                 uniqueItems: true
         '404':
           $ref: '#/components/responses/404ResourceNotFound'
+        '504':
+          $ref: '#/components/responses/504EnvironmentUnresponsive'
     patch:
       summary: Uploads new packages or updates existing ones to the environment at ip:port.
       parameters:
