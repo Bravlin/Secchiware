@@ -1,35 +1,6 @@
-import click, os, requests
+import click, json, os, requests
 
 from typing import List
-
-def print_package(pack: dict, level: int, ident: str):
-    base_ident = ident * level
-    print(f"{base_ident}{pack['name']}")
-    if pack['modules']:
-        print(f"{base_ident}{ident}Modules:")
-        for mod in pack['modules']:
-            print(f"{base_ident}{ident * 2}{mod['name']}")
-            if mod['test_sets']:
-                print(f"{base_ident}{ident * 3}Test sets:")
-                for ts in mod['test_sets']:
-                    print(f"{base_ident}{ident * 4}{ts['name']}")
-                if ts['tests']:
-                    print(f"{base_ident}{ident * 5}Tests:")
-                    for test in ts['tests']:
-                        print(f"{base_ident}{ident * 6}{test}")
-    if pack['subpackages']:
-        print(base_ident + ident + "Subpackages:")
-        for sub in pack['subpackages']:
-            print_package(sub, level + 2, ident)
-
-def print_test_report(report: dict, ident: str):
-    print(f"Test: {report['test_name']}")
-    print(f"Description: {report['test_description']}")
-    print(f"Result code: {report['result_code']}")
-    if 'additional_info' in report:   
-        print("Additional information:")
-        for key, value in report['additional_info'].items():
-            print(f"{ident}{key}: {value}")
 
 @click.group()
 @click.option("--c2-url", "-u", default="http://127.0.0.1:5000",
@@ -46,9 +17,10 @@ def lsavialable():
     except requests.exceptions.ConnectionError:
         print("Connection refused.")
     else:
-        for pack in resp.json():
-            print_package(pack, 0, " " * 2)
-            print()
+        if resp.status_code == 200:
+            print(json.dumps(resp.json(), indent=2))
+        else:
+            print("Unexpected response from Command and Control Sever.")
 
 @main.command("upload")
 @click.argument("file_path")
@@ -63,11 +35,13 @@ def upload_compressed_packages(file_path: str):
                 resp = requests.patch(
                     f"{C2_URL}/test_sets",
                     files={'packages': f})
-            resp.raise_for_status()
         except requests.exceptions.ConnectionError:
             print("Connection refused.")
-        except Exception as e:
-            print(str(e))
+        else:
+            if resp.status_code in [400, 415]:
+                print(resp.json()['error'])
+            elif resp.status_code != 204:
+                print("Unexpected response from Command and Control Sever.")
 
 @main.command("remove")
 @click.argument("packages", nargs=-1)
@@ -75,11 +49,13 @@ def remove_available_packages(packages: List[str]):
     for pack in packages:
         try:
             resp = requests.delete(f"{C2_URL}/test_sets/{pack}")
-            resp.raise_for_status()
         except requests.exceptions.ConnectionError:
             print("Connection refused.")
-        except Exception as e:
-            print(str(e))
+        else:
+            if resp.status_code == 404:
+                print(resp.json()['error'])
+            elif resp.status_code != 204:
+                print("Unexpected response from Command and Control Sever.")
 
 @main.command("lsenv")
 def lsenv():
@@ -94,6 +70,22 @@ def lsenv():
             for port in envs[ip]:
                 print(ip + ":" + port)
 
+@main.command("info")
+@click.argument("ip")
+@click.argument("port")
+def info(ip, port):
+    try:
+        resp = requests.get(f"{C2_URL}/environments/{ip}/{port}/info")
+    except requests.exceptions.ConnectionError:
+        print("Connection refused.")
+    else:
+        if resp.status_code == 200:
+            print(json.dumps(resp.json(), indent=2))
+        elif resp.status_code == 404:
+            print(resp.json()['error'])
+        else:
+            print("Unexpected response from Command and Control Sever.")
+
 @main.command("lsinstalled")
 @click.argument("ip")
 @click.argument("port")
@@ -102,18 +94,19 @@ def lsinstalled(ip, port):
     Lists the currently instaled tests sets
     in the environment at IP:PORT.
     """
-    url = f"{C2_URL}/environments/{ip}/{port}/installed"
     try:
-        resp = requests.get(url)
-        resp.raise_for_status()
+        resp = requests.get(f"{C2_URL}/environments/{ip}/{port}/installed")
     except requests.exceptions.ConnectionError:
         print("Connection refused.")
     except Exception:
         print(resp.json()['error'])
     else:
-        for pack in resp.json():
-            print_package(pack, 0, " " * 2)
-            print()
+        if resp.status_code == 200:
+            print(json.dumps(resp.json(), indent=2))
+        elif resp.status_code in [404, 502, 504]:
+            print(resp.json()['error'])
+        else:
+            print("Unexpected response from Command and Control Sever.")
 
 @main.command("install")
 @click.argument("ip")
@@ -121,14 +114,17 @@ def lsinstalled(ip, port):
 @click.argument("packages", nargs=-1)
 def install(ip, port, packages):
     """Install the given PACKAGES in the environment at IP:PORT."""
-    url = f"{C2_URL}/environments/{ip}/{port}/installed"
     try:
-        resp = requests.patch(url, json=packages)
-        resp.raise_for_status()
+        resp = requests.patch(
+            f"{C2_URL}/environments/{ip}/{port}/installed",
+            json=packages)
     except requests.exceptions.ConnectionError:
         print("Connection refused.")
-    except Exception as e:
-        print(str(e))
+    else:
+        if resp.status_code in [404, 415, 500, 502, 504]:
+            print(resp.json()['error'])
+        elif resp.status_code != 204:
+            print("Unexpected response from Command and Control Sever.")
 
 @main.command("uninstall")
 @click.argument("ip")
@@ -137,12 +133,15 @@ def install(ip, port, packages):
 def uninstall(ip, port, packages):
     for pack in packages:
         try:
-            resp = requests.delete(f"{C2_URL}/environments/{ip}/{port}/installed/{pack}")
-            resp.raise_for_status()
+            resp = requests.delete(
+                f"{C2_URL}/environments/{ip}/{port}/installed/{pack}")
         except requests.exceptions.ConnectionError:
             print("Connection refused.")
-        except Exception as e:
-            print(str(e))
+        else:
+            if resp.status_code in [404, 502, 504]:
+               print(resp.json()['error'])
+            elif resp.status_code != 204:
+                print("Unexpected response from Command and Control Sever.")
 
 @main.command("execute_tests")
 @click.argument("ip")
@@ -157,21 +156,21 @@ def execute_tests(ip, port, package, module, test_set):
     if module:
         query += f"&modules={','.join(module)}"
     if test_set:
-        query += f"&test_set={','.join(test_set)}"
+        query += f"&test_sets={','.join(test_set)}"
     query = query.replace("&", "?", 1)
 
     try:
         resp = requests.get(
             f"{C2_URL}/environments/{ip}/{port}/report{query}")
-        resp.raise_for_status()
     except requests.exceptions.ConnectionError:
             print("Connection refused.")
-    except Exception as e:
-        print(str(e))
     else:
-        for report in resp.json():
-            print_test_report(report, " " * 2)
-            print()
+        if resp.status_code == 200:
+            print(json.dumps(resp.json(), indent=2))
+        elif resp.status_code in [400, 404, 500, 502, 504]:
+            print(resp.json()['error'])
+        else:
+            print("Unexpected response from Command and Control Sever.")
 
 if __name__ == "__main__":
     main()

@@ -3,26 +3,8 @@ import json, os, requests as rq, shutil, tempfile, test_utils
 from custom_collections import OrderedListOfDict
 from datetime import datetime
 from flask import abort, Flask, jsonify, request, Response
+from flask_cors import CORS
 from functools import wraps
-
-SCRIPT_PATH = os.path.dirname(os.path.abspath(__file__))
-TESTS_PATH = os.path.join(SCRIPT_PATH, "test_sets")
-
-with open(os.path.join(SCRIPT_PATH, "config.json"), "r") as config_file:
-    config = json.load(config_file)
-
-if not os.path.isdir(TESTS_PATH):
-    os.mkdir(TESTS_PATH)
-    open(os.path.join(TESTS_PATH, "__init__.py"), "w").close()
-
-available = OrderedListOfDict('name', str)
-try:
-    available.content = test_utils.get_installed_test_sets("test_sets")
-except Exception as e:
-    print(str(e))
-environments = {}
-
-app = Flask(__name__)
 
 
 def check_registered(ip, port):
@@ -35,14 +17,13 @@ def check_is_json():
         abort(415, description="Content Type is not application/json")
 
 
-def client_route(func):
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        response = func(*args, **kwargs)
-        response.headers.add("Access-Control-Allow-Origin", "*")
-        return response
-    
-    return wrapper
+app = Flask(__name__)
+CORS(app, resources={
+    r"/": {},
+    r"/environments": {'methods': "GET"},
+    r"/environments/[^/]+/[^/]+/+": {},
+    r"/test_sets/*": {}
+})
 
 
 @app.errorhandler(400)
@@ -57,18 +38,24 @@ def not_found(e):
 def unsupported_media_type(e):
     return jsonify(error=str(e)), 415
 
+@app.errorhandler(500)
+def internal_server_error(e):
+    return jsonify(error=str(e)), 500
+
+@app.errorhandler(502)
+def bad_gateway(e):
+    return jsonify(error=str(e)), 502
+
 @app.errorhandler(504)
 def gateway_timeout(e):
     return jsonify(error=str(e)), 504
 
 
 @app.route("/", methods=["GET"])
-@client_route
 def is_up():
     return jsonify(success=True)
 
 @app.route("/environments", methods=["GET"])
-@client_route
 def list_environments():
     return jsonify(environments)
 
@@ -105,13 +92,11 @@ def remove_environment(ip, port):
     return Response(status=204, mimetype="application/json")
 
 @app.route("/environments/<ip>/<port>/info", methods=["GET"])
-@client_route
 def get_environment_info(ip, port):
     check_registered(ip, port)
     return jsonify(environments[ip][port]['info'])
     
 @app.route("/environments/<ip>/<port>/installed", methods=["GET"])
-@client_route
 def list_installed_test_sets(ip, port):
     check_registered(ip, port)
 
@@ -121,10 +106,11 @@ def list_installed_test_sets(ip, port):
         abort(504,
             description="The requested environment could not be reached")
 
-    return jsonify(resp.json())
+    if resp.status_code == 200:
+        return jsonify(resp.json())
+    abort(502, description=f"Unexpected response from node at {ip}:{port}")
 
 @app.route("/environments/<ip>/<port>/installed", methods=["PATCH"])
-@client_route
 def install_packages(ip, port):
     check_registered(ip, port)
     check_is_json()
@@ -134,17 +120,21 @@ def install_packages(ip, port):
         with tempfile.SpooledTemporaryFile() as f:
             test_utils.compress_test_packages(f, packages, TESTS_PATH)
             f.seek(0)
-            rq.patch(
+            resp = rq.patch(
                 f"http://{ip}:{port}/test_sets",
                 files={'packages': f})
     except rq.exceptions.ConnectionError:
         abort(504,
             description="The requested environment could not be reached")
-
-    return Response(status=204, mimetype="application/json")
+    
+    if resp.status_code == 204:
+        return Response(status=204, mimetype="application/json")
+    if resp.status_code in [400, 415]:
+        abort(500,
+            description="Something went wrong when handling the request")
+    abort(502, description=f"Unexpected response from node at {ip}:{port}")
 
 @app.route("/environments/<ip>/<port>/installed/<package>", methods=["DELETE"])
-@client_route
 def delete_installed_package(ip, port, package):
     check_registered(ip, port)
 
@@ -156,19 +146,20 @@ def delete_installed_package(ip, port, package):
 
     if resp.status_code == 204:
         return Response(status=204, mimetype="application/json")
-    elif resp.status_code == 404:
+    if resp.status_code == 404:
         return abort(404, description=f"'{package}' not found at {ip}:{port}")
+    abort(502, description=f"Unexpected response from node at {ip}:{port}")
 
 @app.route("/environments/<ip>/<port>/report", methods=["GET"])
-@client_route
 def execute_tests(ip, port):
     check_registered(ip, port)
     
     url = f"http://{ip}:{port}/report"
     if request.args:
         valid_keys = {'packages', 'modules', 'test_sets'}
-        if set(request.args.keys()) - valid_keys:
-            abort(400, "One or more invalid keys found in query parameters")
+        difference = set(request.args.keys()) - valid_keys
+        if difference:
+            abort(400, f"Invalid keys {difference} found in query parameters")
         else:
             url += f"?{request.query_string.decode()}"
 
@@ -178,15 +169,18 @@ def execute_tests(ip, port):
         abort(504,
             description="The requested environment could not be reached")
 
-    return jsonify(resp.json())
+    if resp.status_code == 200:
+        return jsonify(resp.json())
+    if resp.status_code == 400:
+        abort(500,
+            description="Something went wrong when handling the request")
+    abort(502, description=f"Unexpected response from node at {ip}:{port}")
 
 @app.route("/test_sets", methods=["GET"])
-@client_route
 def list_available_test_sets():
     return jsonify(available.content)
 
 @app.route("/test_sets", methods=["PATCH"])
-@client_route
 def upload_test_sets():
     global available
 
@@ -195,15 +189,13 @@ def upload_test_sets():
     if not (request.files and 'packages' in request.files):
         abort(400, description="'packages' key not found in request's body")
     
-    packages = request.files['packages']
-    with tempfile.SpooledTemporaryFile() as f:
-        packages.save(f)
-        f.seek(0)
-        try:
-            new_packages = test_utils.uncompress_test_packages(f, TESTS_PATH)
-        except Exception as e:
-            print(str(e))
-            abort(400, description="Invalid file content")
+    try:
+        new_packages = test_utils.uncompress_test_packages(
+            request.files['packages'],
+            TESTS_PATH)
+    except Exception as e:
+        print(str(e))
+        abort(400, description="Invalid file content")
 
     new_info = []
     for new_pack in new_packages:
@@ -213,7 +205,6 @@ def upload_test_sets():
     return Response(status=204, mimetype="application/json")
 
 @app.route("/test_sets/<package>", methods=["DELETE"])
-@client_route
 def delete_package(package):
     global available
 
@@ -226,5 +217,22 @@ def delete_package(package):
     return Response(status=204, mimetype="application/json")
 
 
+SCRIPT_PATH = os.path.dirname(os.path.abspath(__file__))
+TESTS_PATH = os.path.join(SCRIPT_PATH, "test_sets")
+
+with open(os.path.join(SCRIPT_PATH, "config.json"), "r") as config_file:
+    config = json.load(config_file)
+
+if not os.path.isdir(TESTS_PATH):
+    os.mkdir(TESTS_PATH)
+    open(os.path.join(TESTS_PATH, "__init__.py"), "w").close()
+
+available = OrderedListOfDict('name', str)
+try:
+    available.content = test_utils.get_installed_test_sets("test_sets")
+except Exception as e:
+    print(str(e))
+environments = {}
+
 if __name__ == "__main__":
-    app.run(host=config['IP'], port=config['PORT'], debug=True)
+    app.run(host=config['IP'], port=config['PORT'])

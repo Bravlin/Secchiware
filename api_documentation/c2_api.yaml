@@ -120,20 +120,68 @@ components:
     topPackage:
       $ref: 'node_api.yaml#/paths/~1test_sets~1{package}/delete/parameters/0'
   responses:
+    400InvalidRequest:
+      description: Invalid request
+      headers:
+        Access-Control-Allow-Origin:
+          schema:
+            type: string
+          description: Provides cross origin access to the specified domain
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/HTTPError'
     404ResourceNotFound:
       description: Resource not found
+      headers:
+        Access-Control-Allow-Origin:
+          schema:
+            type: string
+          description: Provides cross origin access to the specified domain
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/HTTPError'
     415UnsupportedMediaType:
       description: Format of the request's payload is not supported
+      headers:
+        Access-Control-Allow-Origin:
+          schema:
+            type: string
+          description: Provides cross origin access to the specified domain
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/HTTPError'
+    500InternalServerError:
+      description: Something went wrong when handling the request
+      headers:
+        Access-Control-Allow-Origin:
+          schema:
+            type: string
+          description: Provides cross origin access to the specified domain
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/HTTPError'
+    502BadGateway:
+      description: Invalid response recieved from requested node
+      headers:
+        Access-Control-Allow-Origin:
+          schema:
+            type: string
+          description: Provides cross origin access to the specified domain
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/HTTPError'
     504EnvironmentUnresponsive:
       description: The requested environment could not be reached
+      headers:
+        Access-Control-Allow-Origin:
+          schema:
+            type: string
+          description: Provides cross origin access to the specified domain
       content:
         application/json:
           schema:
@@ -218,7 +266,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/HTTPError'
         '415':
-          $ref: '#/components/responses/415UnsupportedMediaType'
+          description: Format of the request's payload is not supported
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPError'
   /environments/{ip}/{port}:
     delete:
       summary: Allows the node at ip:port to unregister itself.
@@ -229,7 +281,7 @@ paths:
         '204':
           description: Environment removed successfully
         '404':
-          $ref: '#/components/responses/404ResourceNotFound'
+          description: Package not found
   /environments/{ip}/{port}/info:
     get:
       summary: Recovers information about the platform of the environment at ip:port.
@@ -273,6 +325,8 @@ paths:
                 uniqueItems: true
         '404':
           $ref: '#/components/responses/404ResourceNotFound'
+        '502':
+          $ref: '#/components/responses/502BadGateway'
         '504':
           $ref: '#/components/responses/504EnvironmentUnresponsive'
     patch:
@@ -293,10 +347,19 @@ paths:
       responses:
         '204':
           description: Packages transferred or updated successfully
+          headers:
+            Access-Control-Allow-Origin:
+              schema:
+                type: string
+              description: Provides cross origin access to the specified domain
         '404':
           $ref: '#/components/responses/404ResourceNotFound'
         '415':
           $ref: '#/components/responses/415UnsupportedMediaType'
+        '500':
+          $ref: '#/components/responses/500InternalServerError'
+        '502':
+          $ref: '#/components/responses/502BadGateway'
         '504':
           $ref: '#/components/responses/504EnvironmentUnresponsive'
   /environments/{ip}/{port}/installed/{package}:
@@ -309,8 +372,15 @@ paths:
       responses:
         '204':
           description: Package uninstalled successfully
+          headers:
+            Access-Control-Allow-Origin:
+              schema:
+                type: string
+              description: Provides cross origin access to the specified domain
         '404':
           $ref: '#/components/responses/404ResourceNotFound'
+        '502':
+          $ref: '#/components/responses/502BadGateway'
         '504':
           $ref: '#/components/responses/504EnvironmentUnresponsive'
   /environments/{ip}/{port}/report:
@@ -337,13 +407,13 @@ paths:
                 items:
                   $ref: '#/components/schemas/TestReport'
         '400':
-          description: Invalid query parameters
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPError'
+          $ref: '#/components/responses/400InvalidRequest'
         '404':
           $ref: '#/components/responses/404ResourceNotFound'
+        '500':
+          $ref: '#/components/responses/500InternalServerError'
+        '502':
+          $ref: '#/components/responses/502BadGateway'
         '504':
           $ref: '#/components/responses/504EnvironmentUnresponsive'
   /test_sets:
@@ -384,12 +454,13 @@ paths:
       responses:
         '204':
           description: File correctly uncompressed and packages added or updated accordingly
-        '400':
-          description: Invalid request's content
-          content:
-            application/json:
+          headers:
+            Access-Control-Allow-Origin:
               schema:
-                $ref: '#/components/schemas/HTTPError'
+                type: string
+              description: Provides cross origin access to the specified domain
+        '400':
+          $ref: '#/components/responses/400InvalidRequest'
         '415':
           $ref: '#/components/responses/415UnsupportedMediaType'
   /test_sets/{package}:
@@ -401,5 +472,10 @@ paths:
       responses:
         '204':
           description: Package deleted successfully
+          headers:
+            Access-Control-Allow-Origin:
+              schema:
+                type: string
+              description: Provides cross origin access to the specified domain
         '404':
           $ref: '#/components/responses/404ResourceNotFound'

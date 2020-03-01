@@ -4,7 +4,9 @@ import signal, shutil, sys, tempfile, test_utils
 from custom_collections import OrderedListOfDict
 from flask import abort, Flask, jsonify, request, Response
 
+
 app = Flask(__name__)
+
 
 @app.errorhandler(400)
 def bad_request(e):
@@ -17,6 +19,7 @@ def not_found(e):
 @app.errorhandler(415)
 def unsupported_media_type(e):
     return jsonify(error=str(e)), 415
+
 
 @app.route("/test_sets", methods=["GET"])
 def list_installed_test_sets():
@@ -31,15 +34,13 @@ def install_test_sets():
     if not (request.files and 'packages' in request.files):
         abort(400, description="Invalid request's content")
     
-    packages = request.files['packages']
-    with tempfile.SpooledTemporaryFile() as f:
-        packages.save(f)
-        f.seek(0)
-        try:
-            new_packages = test_utils.uncompress_test_packages(f, TESTS_PATH)
-        except Exception as e:
-            print(str(e))
-            abort(400, description="Invalid request's content")
+    try:
+        new_packages = test_utils.uncompress_test_packages(
+            request.files['packages'],
+            TESTS_PATH)
+    except Exception as e:
+        print(str(e))
+        abort(400, description="Invalid request's content")
     
     new_info = []
     for new_pack in new_packages:
@@ -159,7 +160,7 @@ if __name__ == "__main__":
             installed.content = test_utils.get_installed_test_sets("test_sets")
         except Exception as e:
             print(str(e))
-        app.run(host=config['ip'], port=config['port'], debug=False)
+        app.run(host=config['ip'], port=config['port'])
     else:
         print("Connection refused.\n\nExecuting installed tests...\n\n")
         tests = test_utils.TestSetCollection("test_sets")
