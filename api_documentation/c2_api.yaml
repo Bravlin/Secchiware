@@ -74,9 +74,10 @@ components:
             - version
       required:
         - platform
-        - compiler
-        - implementation
-        - version
+        - node
+        - os
+        - hardware
+        - python
       example:
         platform: Linux-3.13.0-55-generic-x86_64-with-Ubuntu-14.04-trusty
         node: MyMachine
