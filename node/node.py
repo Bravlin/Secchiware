@@ -1,5 +1,5 @@
 import json, platform, os, requests as rq
-import signal, shutil, sys, tempfile, test_utils
+import signal, shutil, sys, test_utils
 
 from custom_collections import OrderedListOfDict
 from flask import abort, Flask, jsonify, request, Response

@@ -282,7 +282,7 @@ paths:
         '204':
           description: Environment removed successfully
         '404':
-          description: Package not found
+          $ref: '#/components/responses/404ResourceNotFound'
   /environments/{ip}/{port}/info:
     get:
       summary: Recovers information about the platform of the environment at ip:port.
