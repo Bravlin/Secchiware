@@ -117,11 +117,14 @@ def install_packages(ip, port):
     packages = request.json
     try:
         with tempfile.SpooledTemporaryFile() as f:
+            # Can throw ValueError.
             test_utils.compress_test_packages(f, packages, TESTS_PATH)
             f.seek(0)
             resp = rq.patch(
                 f"http://{ip}:{port}/test_sets",
                 files={'packages': f})
+    except ValueError as e:
+        abort(400, description=str(e))
     except rq.exceptions.ConnectionError:
         abort(504,
             description="The requested environment could not be reached")

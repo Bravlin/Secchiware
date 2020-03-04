@@ -107,9 +107,6 @@ class TestSet(ABC):
             and issubclass(x, TestSet)
             and x is not TestSet)
 
-    def __init__(self, description: str):
-        self.description = description
-
     def run(self) -> List[dict]:
         """Executes all given tests in the set.
         
@@ -237,7 +234,7 @@ class TestSetCollection():
         if TestSet.is_strict_subclass(c):
             self.test_sets.append(c())
         else:
-            raise ValueError(f"{test_set} is not a valid class.")
+            raise ValueError(f"{test_set} is not a valid class name.")
 
     def run_all_tests(self) -> List[dict]:
         """Executes all the test sets in the collection.
@@ -292,10 +289,10 @@ def get_installed_package(package_name: str) -> dict:
 
     installed = {
         'name': package_name.split(".")[-1], # Basename only.
-        'subpackages': [],
-        'modules': [],
     }
     package = import_module(package_name)
+    modules_list = []
+    subpackages_list = []
     # Looks for packages in package.__path__.
     # All found entities are given their canonical name inheriting their
     # parent's.
@@ -305,24 +302,37 @@ def get_installed_package(package_name: str) -> dict:
         if is_pkg:
             # Recursive call with the found subpackage.
             sub = get_installed_package(name)
-            installed['subpackages'].append(sub)
+            subpackages_list.append(sub)
         else:
             module_info = {
                 'name': name.split(".")[-1], # Basename only.
-                'test_sets': []
             }
             module = import_module(name)
+            
+            classes_list = []
             classes = inspect.getmembers(module, TestSet.is_strict_subclass)
             for class_name, c in classes:
                 class_info = {
                     'name': class_name,
-                    'tests': []
                 }
+
+                tests_list = []
                 tests = inspect.getmembers(c, is_test)
                 for test_name, _ in tests:
-                    class_info['tests'].append(test_name)
-                module_info['test_sets'].append(class_info)
-            installed['modules'].append(module_info)
+                    tests_list.append(test_name)
+                
+                if tests_list:
+                    class_info['tests'] = tests_list
+                classes_list.append(class_info)
+            
+            if classes_list:
+                module_info['test_sets'] = classes_list
+            modules_list.append(module_info)
+    
+    if modules_list:
+        installed['modules'] = modules_list
+    if subpackages_list:
+        installed['subpackages'] = subpackages_list
     return installed
 
 def get_installed_test_sets(root_package: str) -> List[dict]:
@@ -374,6 +384,11 @@ def compress_test_packages(
         A list of packages names.
     tests_root : str
         The root directory name where the tests sets packages are stored.
+
+    Raises
+    ------
+    ValueError
+        One of the given packages is not a top level one or does not exist.
     """
 
     def filter_pycache(x):
@@ -387,13 +402,13 @@ def compress_test_packages(
     with tarfile.open(fileobj=file_object, mode="w:gz") as tar:
         for tp in test_packages:
             if len(tp.split(".")) > 1:
-                print(tp + "ignored. Only top level packages allowed.")
+                raise ValueError(f"{tp} is not a top level package.")
             else:
                 tp_path = os.path.join(tests_root, tp)
                 if os.path.isdir(tp_path):
                     tar.add(tp_path, tp, filter=filter_pycache)
                 else:
-                    print("No package found with name " + tp + ".")
+                    raise ValueError(f"No package found with name {tp}.")
 
 def uncompress_test_packages(file_object: BinaryIO, tests_root: str) -> List[str]:
     """Uncompress the given file in the root directory for tests.

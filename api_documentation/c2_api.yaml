@@ -353,6 +353,8 @@ paths:
               schema:
                 type: string
               description: Provides cross origin access to the specified domain
+        '400':
+          $ref: '#/components/responses/400InvalidRequest'
         '404':
           $ref: '#/components/responses/404ResourceNotFound'
         '415':

@@ -2,9 +2,6 @@ from test_utils import TestResult, TestSet, test
 
 class DebugSet(TestSet):
 
-    def __init__(self):
-        super().__init__("Debug")
-
     @test(
         name="Is tracer attached?",
         description="Looks for a TracerPid different than 0.")

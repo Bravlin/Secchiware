@@ -63,6 +63,11 @@ def delete_package(package):
 
 @app.route("/report", methods=["GET"])
 def execute_tests():
+    def split_parameter(x):
+        if isinstance(x, str):
+            return x.split(",")
+        raise ValueError
+
     if not request.args:
         tests = test_utils.TestSetCollection("test_sets")
     else:
@@ -71,14 +76,9 @@ def execute_tests():
         if set(params.keys()) - valid_keys:
             abort(400, "Invalid query parameters")
         else:
-            packages = params.get('packages', "")
-            packages = packages.split(",") if packages else []
-            modules = params.get('modules', "")
-            modules = modules.split(",") if modules else []
-            test_sets = params.get('test_sets', "")
-            test_sets = test_sets.split(",") if test_sets else []
-
-            print(modules)
+            packages = params.get('packages', [], split_parameter)
+            modules = params.get('modules', [], split_parameter)
+            test_sets = params.get('test_sets', [], split_parameter)
 
         tests = test_utils.TestSetCollection(
             "test_sets",

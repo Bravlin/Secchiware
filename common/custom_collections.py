@@ -23,11 +23,11 @@ class OrderedListOfDict():
         key = self._sort_key
         for d in value:
             if not isinstance(d, dict):
-                raise ValueError("Found member in argument which is not a dictionary.")
+                raise TypeError("Found member in argument which is not a dictionary.")
             if not key in d:
                 raise ValueError("The sort key is not present in one of the members of the argument.")
             if not isinstance(d[key], self._skvt):
-                raise ValueError("The type of the value corresponding to the sort key is not correct in one of the members.")
+                raise TypeError("The type of the value corresponding to the sort key is not correct in one of the members.")
         self._ordered_list = sorted(value, key=lambda x : x[key])
 
     def index_of(self, key_value: Any) -> int:
@@ -40,7 +40,7 @@ class OrderedListOfDict():
 
         Raises
         ------
-        ValueError
+        TypeError
             The given key's type is not valid for this collection.
 
         Returns
@@ -51,7 +51,7 @@ class OrderedListOfDict():
         """
 
         if not isinstance(key_value, self._skvt):
-            raise ValueError("The argument type is invalid.")
+            raise TypeError("The argument type is invalid.")
         
         key = self._sort_key
         ol = self._ordered_list
@@ -83,16 +83,19 @@ class OrderedListOfDict():
         Raises
         ------
         ValueError
-            d does not contain appropiate data.
+            d does not contain the needed sort key.
+        TypeError
+            d is not a dictionary or its element associated to the sort key has
+            a wrong type.
         """
 
         key = self._sort_key
         if not isinstance(d, dict):
-            raise ValueError("The argument is not a dictionary.")
+            raise TypeError("The argument is not a dictionary.")
         if not key in d:
             raise ValueError("The sort key is not present in the argument.")
         if not isinstance(d[key], self._skvt):
-            raise ValueError("The type of the value corresponding to the sort key is not correct.")
+            raise TypeError("The type of the value corresponding to the sort key is not correct.")
 
         ol = self._ordered_list
         # Binary search.
@@ -121,7 +124,7 @@ class OrderedListOfDict():
             else:
                 try:
                     index = self.index_of(d[key])
-                except ValueError:
+                except TypeError:
                     print("The type of the value corresponding to the sort key is not correct in one of the members.")
                 else:
                     if index >= 0:
@@ -146,11 +149,11 @@ class OrderedListOfDict():
         ------
         KeyError
             The given key was not found in the collection.
-        ValueError
+        TypeError
             The given key's type is not valid for this collection.
         """
-        
-        index = self.index_of(key_value) # Can throw ValueError.
+
+        index = self.index_of(key_value) # Can throw TypeError.
         if index < 0:
             raise KeyError()
         del self._ordered_list[index]
