@@ -31,11 +31,31 @@ class OrderedListOfDict():
         self._ordered_list = sorted(value, key=lambda x : x[key])
 
     def index_of(self, key_value: Any) -> int:
+        """Looks for the index of the element associated to the given key.
+        
+        Parameters
+        ----------
+        key_value: Any
+            The key to look for in the collection.
+
+        Raises
+        ------
+        ValueError
+            The given key's type is not valid for this collection.
+
+        Returns
+        -------
+        int
+            The index of the element associated to the given key. Returns -1 in
+            the case where there was no match.
+        """
+
         if not isinstance(key_value, self._skvt):
             raise ValueError("The argument type is invalid.")
         
         key = self._sort_key
         ol = self._ordered_list
+        # Binary search.
         start = 0
         end = len(ol) - 1
         middle = (start + end)//2
@@ -45,11 +65,27 @@ class OrderedListOfDict():
             else:
                 start = middle + 1
             middle = (start + end)//2
-        if start > end:
+        if start > end: # No match.
             return -1
         return middle
 
     def insert(self, d: dict) -> None:
+        """Inserts (or updates) d in the collection.
+
+        If d has a key that alredy exists in the collection, it replaces the
+        associated element.
+
+        Parameters
+        ----------
+        d: dict
+            The element to insert or update in the collection.
+        
+        Raises
+        ------
+        ValueError
+            d does not contain appropiate data.
+        """
+
         key = self._sort_key
         if not isinstance(d, dict):
             raise ValueError("The argument is not a dictionary.")
@@ -59,6 +95,7 @@ class OrderedListOfDict():
             raise ValueError("The type of the value corresponding to the sort key is not correct.")
 
         ol = self._ordered_list
+        # Binary search.
         start = 0
         end = len(ol) - 1
         middle = (start + end)//2
@@ -69,9 +106,9 @@ class OrderedListOfDict():
                 start = middle + 1
             middle = (start + end)//2
         if start > end:
-            ol.insert(start, d) # Inserts
+            ol.insert(start, d) # Inserts if there was no match.
         else:
-            ol[middle] = d # Updates
+            ol[middle] = d # Updates if there was a match.
 
     def batch_insert(self, values: List[dict]) -> None:
         key = self._sort_key
@@ -88,14 +125,32 @@ class OrderedListOfDict():
                     print("The type of the value corresponding to the sort key is not correct in one of the members.")
                 else:
                     if index >= 0:
-                        self._ordered_list[index] = d
+                        self._ordered_list[index] = d # Updates if there was no match.
                     else:
+                        # Appends if there was a match.
                         self._ordered_list.append(d)
                         appended = True
+        # It's faster to order the list after appending various elements
+        # than inserting them keeping the list's order.
         if appended: self._ordered_list.sort(key=lambda x : x[key])
 
     def delete(self, key_value: Any) -> None:
-        index = self.index_of(key_value)
+        """Removes the element associated to the given key from the collection.
+
+        Parameters
+        ----------
+        key_value: Any
+            The key to look for in the collection.
+
+        Raises
+        ------
+        KeyError
+            The given key was not found in the collection.
+        ValueError
+            The given key's type is not valid for this collection.
+        """
+        
+        index = self.index_of(key_value) # Can throw ValueError.
         if index < 0:
             raise KeyError()
         del self._ordered_list[index]

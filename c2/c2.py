@@ -4,7 +4,6 @@ from custom_collections import OrderedListOfDict
 from datetime import datetime
 from flask import abort, Flask, jsonify, request, Response
 from flask_cors import CORS
-from functools import wraps
 
 
 def check_registered(ip, port):
