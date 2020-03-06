@@ -80,17 +80,25 @@ def test(name: str, description: str) -> Callable:
     return test_decorator
 
 def is_test(x: Any) -> bool:
-    """Returns wheter the argument is a test method.
-    
+    """
     Its use is recommended when inspecting a class definition, as there is no
     instance bound to the method.
+
+    Returns
+    -------
+    bool
+        Wheter the argument is a test method.
     """
 
     return inspect.isfunction(x) and hasattr(x, 'test')
 
 def is_test_method(x: Any) -> bool:
-    """Returns wheter the argument is a test in the form a method bound to an
-    object."""
+    """
+    Returns
+    -------
+    bool 
+        Wheter the argument is a test in the form a method bound to an object.
+    """
 
     return inspect.ismethod(x) and hasattr(x, 'test')
 
@@ -100,8 +108,13 @@ class TestSet(ABC):
 
     @staticmethod
     def is_strict_subclass(x: Any) -> bool:
-        """Returns wheter the argument is a subclass of TestSet but not TestSet
-        itself."""
+        """
+        Returns
+        -------
+        bool
+            Wheter the argument is a subclass of TestSet but not TestSet
+            itself.
+        """
 
         return (inspect.isclass(x)
             and issubclass(x, TestSet)

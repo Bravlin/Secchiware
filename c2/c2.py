@@ -7,11 +7,28 @@ from flask_cors import CORS
 
 
 def check_registered(ip, port):
+    """Verifies if the given ip and port correspond to an active environment.
+
+    If there is no match, it aborts the current request handler.
+
+    Parameters
+    ----------
+    ip
+        The ip to look for.
+    port
+        The port associated to the given ip to look for.
+    """
+
     if not (ip in environments and port in environments[ip]):
         abort(404,
             description=f"No environment registered for {ip}:{port}")
 
 def check_is_json():
+    """Verifies that the current request's MIME type is 'application/json'.
+
+    If that's not the case, it aborts the current request handler.
+    """
+
     if not request.is_json:
         abort(415, description="Content Type is not application/json")
 
