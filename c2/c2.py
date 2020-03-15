@@ -1,9 +1,16 @@
-import json, os, requests as rq, shutil, tempfile, test_utils
+import hmac
+import json
+import os
+import requests as rq
+import shutil
+import tempfile
+import test_utils
 
 from custom_collections import OrderedListOfDict
 from datetime import datetime
 from flask import abort, Flask, jsonify, request, Response
 from flask_cors import CORS
+from hashlib import sha256
 
 
 def check_registered(ip, port):
@@ -137,9 +144,16 @@ def install_packages(ip, port):
             # Can throw ValueError.
             test_utils.compress_test_packages(f, packages, TESTS_PATH)
             f.seek(0)
-            resp = rq.patch(
+            hasher = hmac.new(config['NODE_SECRET'], f.read(), sha256)
+            f.seek(0)
+            prepared = rq.Request(
+                "PATCH",
                 f"http://{ip}:{port}/test_sets",
-                files={'packages': f})
+                files={
+                    'packages': f,
+                    'signature': (None, hasher.hexdigest(), "application/json"),
+                }).prepare()
+        resp = rq.Session().send(prepared)
     except ValueError as e:
         abort(400, description=str(e))
     except rq.exceptions.ConnectionError:
@@ -197,6 +211,9 @@ def execute_tests(ip, port):
 
 @app.route("/test_sets", methods=["GET"])
 def list_available_test_sets():
+    print(request.path)
+    print(request.query_string)
+    print(request.url)
     return jsonify(available.content)
 
 @app.route("/test_sets", methods=["PATCH"])
@@ -241,6 +258,7 @@ TESTS_PATH = os.path.join(SCRIPT_PATH, "test_sets")
 
 with open(os.path.join(SCRIPT_PATH, "config.json"), "r") as config_file:
     config = json.load(config_file)
+config['NODE_SECRET'] = config['NODE_SECRET'].encode()
 
 if not os.path.isdir(TESTS_PATH):
     os.mkdir(TESTS_PATH)

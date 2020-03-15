@@ -1,5 +1,6 @@
 {
-    "c2url": "http://127.0.0.1:5000",
-    "ip": "127.0.0.1",
-    "port": "4900"
+    "C2_URL": "http://127.0.0.1:5000",
+    "C2_SECRET": "MySuPeRDuPerSeCrEtKeY",
+    "IP": "127.0.0.1",
+    "PORT": "4900"
 }

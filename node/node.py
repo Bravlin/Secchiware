@@ -1,8 +1,16 @@
-import json, platform, os, requests as rq
-import signal, shutil, sys, test_utils
+import hmac
+import json
+import platform
+import os
+import requests as rq
+import signal
+import shutil
+import sys
+import test_utils
 
 from custom_collections import OrderedListOfDict
 from flask import abort, Flask, jsonify, request, Response
+from hashlib import sha256
 
 
 app = Flask(__name__)
@@ -11,6 +19,10 @@ app = Flask(__name__)
 @app.errorhandler(400)
 def bad_request(e):
     return jsonify(error=str(e)), 400
+
+@app.errorhandler(401)
+def unauthorized(e):
+    return jsonify(error=str(e)), 401
 
 @app.errorhandler(404)
 def not_found(e):
@@ -29,11 +41,21 @@ def list_installed_test_sets():
 def install_test_sets():
     global installed
     
+    print(request.headers)
     if not request.mimetype == 'multipart/form-data':
         abort(415, description="Invalid request's content type")
-    if not (request.files and 'packages' in request.files):
+    if not (request.files and 'packages' in request.files and request.form
+            and 'signature' in request.form):
         abort(400, description="Invalid request's content")
     
+    hasher = hmac.new(
+        config['C2_SECRET'],
+        request.files['packages'].read(),
+        sha256)
+    if not hmac.compare_digest(hasher.hexdigest(), request.form['signature']):
+        abort(403, description="Signature not valid")
+
+    request.files['packages'].seek(0)
     try:
         new_packages = test_utils.uncompress_test_packages(
             request.files['packages'],
@@ -116,10 +138,10 @@ def get_platform_info():
 def connect_to_c2():
     try:
         resp = rq.post(
-            f"{config['c2url']}/environments",
+            f"{config['C2_URL']}/environments",
             json={
-                'ip': config['ip'],
-                'port': config['port'],
+                'ip': config['IP'],
+                'port': config['PORT'],
                 'platform': get_platform_info()
             }
         )
@@ -131,7 +153,7 @@ def exit_gracefully(sig, frame):
     print("Exiting...")
     try:
         resp = rq.delete(
-            f"{config['c2url']}/environments/{config['ip']}/{config['port']}")
+            f"{config['C2_URL']}/environments/{config['IP']}/{config['PORT']}")
         resp.raise_for_status()
     except rq.exceptions.ConnectionError:
         print("Could not contact Command and Control server before exiting.")
@@ -146,6 +168,7 @@ if __name__ == "__main__":
 
     with open(os.path.join(SCRIPT_PATH, "config.json"), "r") as config_file:
         config = json.load(config_file)
+    config['C2_SECRET'] = config['C2_SECRET'].encode()
 
     if not os.path.isdir(TESTS_PATH):
         os.mkdir(TESTS_PATH)
@@ -160,7 +183,7 @@ if __name__ == "__main__":
             installed.content = test_utils.get_installed_test_sets("test_sets")
         except Exception as e:
             print(str(e))
-        app.run(host=config['ip'], port=config['port'])
+        app.run(host=config['IP'], port=config['PORT'])
     else:
         print("Connection refused.\n\nExecuting installed tests...\n\n")
         tests = test_utils.TestSetCollection("test_sets")
