@@ -2,10 +2,12 @@ import hmac
 import json
 import os
 import requests as rq
+import signatures
 import shutil
 import tempfile
 import test_utils
 
+from base64 import b64encode
 from custom_collections import OrderedListOfDict
 from datetime import datetime
 from flask import abort, Flask, jsonify, request, Response
@@ -144,15 +146,24 @@ def install_packages(ip, port):
             # Can throw ValueError.
             test_utils.compress_test_packages(f, packages, TESTS_PATH)
             f.seek(0)
-            hasher = hmac.new(config['NODE_SECRET'], f.read(), sha256)
-            f.seek(0)
             prepared = rq.Request(
                 "PATCH",
                 f"http://{ip}:{port}/test_sets",
-                files={
-                    'packages': f,
-                    'signature': (None, hasher.hexdigest(), "application/json"),
-                }).prepare()
+                files={'packages': f}).prepare()
+        
+        digest = b64encode(sha256(prepared.body).digest()).decode()
+        prepared.headers['Digest'] = f"sha-256={digest}"
+
+        headers = ['Digest']
+        signature = signatures.new_signature(
+            config['NODE_SECRET'],
+            "PATCH",
+            "/test_sets",
+            signature_headers=headers,
+            header_recoverer=lambda h: prepared.headers.get(h))
+        prepared.headers["Authorization"] =\
+            signatures.new_authorization_header("C2", signature, headers)
+
         resp = rq.Session().send(prepared)
     except ValueError as e:
         abort(400, description=str(e))
@@ -162,7 +173,7 @@ def install_packages(ip, port):
     
     if resp.status_code == 204:
         return Response(status=204, mimetype="application/json")
-    if resp.status_code in [400, 415]:
+    if resp.status_code in {400, 401, 415}:
         abort(500,
             description="Something went wrong when handling the request")
     abort(502, description=f"Unexpected response from node at {ip}:{port}")

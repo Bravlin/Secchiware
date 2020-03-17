@@ -4,10 +4,12 @@ import platform
 import os
 import requests as rq
 import signal
+import signatures
 import shutil
 import sys
 import test_utils
 
+from base64 import b64encode
 from custom_collections import OrderedListOfDict
 from flask import abort, Flask, jsonify, request, Response
 from hashlib import sha256
@@ -22,7 +24,10 @@ def bad_request(e):
 
 @app.errorhandler(401)
 def unauthorized(e):
-    return jsonify(error=str(e)), 401
+    res = jsonify(error=str(e))
+    res.status_code = 401
+    res.headers['WWW-Authenticate'] = f'SECCHIWARE-HMAC-256 realm="Access to node"'
+    return res
 
 @app.errorhandler(404)
 def not_found(e):
@@ -41,21 +46,38 @@ def list_installed_test_sets():
 def install_test_sets():
     global installed
     
-    print(request.headers)
     if not request.mimetype == 'multipart/form-data':
         abort(415, description="Invalid request's content type")
-    if not (request.files and 'packages' in request.files and request.form
-            and 'signature' in request.form):
-        abort(400, description="Invalid request's content")
-    
-    hasher = hmac.new(
-        config['C2_SECRET'],
-        request.files['packages'].read(),
-        sha256)
-    if not hmac.compare_digest(hasher.hexdigest(), request.form['signature']):
-        abort(403, description="Signature not valid")
 
-    request.files['packages'].seek(0)
+    if not 'Digest' in request.headers:
+        abort(400, description="'Digest' header mandatory.")
+    if not request.headers['Digest'].startswith("sha-256="):
+        abort(400, description="Digest algorithm should be sha-256.")
+    digest = b64encode(sha256(request.get_data()).digest()).decode()
+    print(digest)
+    if digest != request.headers['Digest'].split("=", 1)[1]:
+        abort(400, description="Given digest does not match content.")
+
+    if not 'Authorization' in request.headers:
+        abort(401, description="No 'Authorization' header found in request.")
+    try:
+        is_valid = signatures.verify_authorization_header(
+            request.headers['Authorization'],
+            lambda keyID: config['C2_SECRET'] if keyID == "C2" else None,   
+            lambda h: request.headers.get(h),
+            request.method,
+            request.path,
+            request.query_string.decode(),
+            ['Digest'])
+    except ValueError as e:
+        abort(401, description=str(e))
+    except Exception as e:
+        abort(401, description="Invalid 'Authorization' header.")
+    if not is_valid:
+        abort(401, description="Invalid signature.")
+
+    if not (request.files and 'packages' in request.files):
+        abort(400, description="Invalid request's content")
     try:
         new_packages = test_utils.uncompress_test_packages(
             request.files['packages'],
@@ -95,7 +117,7 @@ def execute_tests():
     else:
         valid_keys = {'packages', 'modules', 'test_sets'}
         params = request.args
-        if set(params.keys()) - valid_keys:
+        if {*params.keys()} - valid_keys:
             abort(400, "Invalid query parameters")
         else:
             packages = params.get('packages', [], split_parameter)

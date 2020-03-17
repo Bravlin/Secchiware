@@ -6,16 +6,12 @@ from urllib import parse
 
 
 def new_signature(
-        keyID: str,
-        key_recoverer: Callable,
+        key: bytes,
         method: str,
         canonical_URI: str,
         query: str = "",
         signature_headers: List[str] = [],
         header_recoverer: Callable = None) -> str:
-    key = key_recoverer(keyID)
-    if key is None:
-        raise ValueError("No key mathes the given keyID.")
     signature_str = f"{method.lower()}\n{canonical_URI}\n"
     if query:
         # Canonical query string should be URL-encoded (space=%20)
@@ -26,8 +22,10 @@ def new_signature(
             raise TypeError("'header_recoverer' is None but 'signature_headers' is not empty.")
         for h in signature_headers:
             h = h.lower()
-            # Can raise KeyError
-            signature_str = f"{signature_str}{h}: {header_recoverer(h)}\n"
+            header_value = header_recoverer(h)
+            if header_value is None:
+                raise KeyError(h)
+            signature_str = f"{signature_str}{h}: {header_value}\n"
 
     signature_str = signature_str.rstrip()
     hasher = hmac.new(key, signature_str.encode(), "sha256")
@@ -46,45 +44,53 @@ def new_authorization_header(
     return authorization_header
 
 def verify_authorization_header(
-            authorization_header: str,
-            key_recoverer: Callable,
-            header_recoverer: Callable,
-            method: str,
-            canonical_URI: str,
-            query: str = "") -> bool:
+        authorization_header: str,
+        key_recoverer: Callable,
+        header_recoverer: Callable,
+        method: str,
+        canonical_URI: str,
+        query: str = "",
+        mandatory_headers: List[str] = []) -> bool:
     if not authorization_header.startswith("SECCHIWARE-HMAC-256"):
         raise ValueError("Invalid signature algorithm.")
 
-    parameters = authorization_header.split(" ")[1].split(",")
+    parameters = authorization_header.split(" ", 1)[1].split(",")
 
     if not parameters[0].startswith("keyId="):
         raise ValueError("Missing 'keyId' authorization parameter.")
-    keyID = parameters[0].split("=")[1]
+    key = key_recoverer(parameters[0].split("=", 1)[1])
+    if key is None:
+        raise ValueError("No key mathes the given keyID.")
 
     if not parameters[1].startswith("headers="):
         final_param = 1
-        # Can raise ValueError or KeyError
+        # Can raise ValueError
         signature = new_signature(
-            keyID,
-            key_recoverer,
+            key,
             method,
             canonical_URI,
             query)
     else:
         final_param = 2
-        signature_headers = parameters[1].split("=")[1].split(";")
-        # Can raise ValueError or KeyError
-        signature = new_signature(
-            keyID,
-            key_recoverer,
-            method,
-            canonical_URI,
-            query,
-            signature_headers,
-            header_recoverer)
+        signature_headers = parameters[1].split("=", 1)[1].split(";")
+        not_present = {h.lower() for h in mandatory_headers}\
+            - {*signature_headers}
+        if not_present:
+            raise ValueError(f"Mandatory header/s not specified: {','.join(not_present)}")
+        try:
+            # Can raise ValueError or KeyError
+            signature = new_signature(
+                key,
+                method,
+                canonical_URI,
+                query,
+                signature_headers,
+                header_recoverer)
+        except KeyError as e:
+            raise ValueError(f"{str(e)} header specified but not present.")
 
     if not parameters[final_param].startswith("signature="):
         raise ValueError("Missing 'signature' authorization parameter.")
-    given_signature = parameters[final_param].split("=")[1]
+    given_signature = parameters[final_param].split("=", 1)[1]
 
     return signature == given_signature
