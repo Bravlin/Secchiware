@@ -182,15 +182,23 @@ def install_packages(ip, port):
 def delete_installed_package(ip, port, package):
     check_registered(ip, port)
 
+    signature = signatures.new_signature(
+        config['NODE_SECRET'],
+        "DELETE",
+        f"/test_sets/{package}")
+    authorization_content = signatures.new_authorization_header("C2", signature)
+
     try:
-        resp = rq.delete(f"http://{ip}:{port}/test_sets/{package}")
+        resp = rq.delete(
+            f"http://{ip}:{port}/test_sets/{package}",
+            headers={'Authorization': authorization_content})
     except rq.exceptions.ConnectionError:
         abort(504,
             description="The requested environment could not be reached")
 
     if resp.status_code == 204:
         return Response(status=204, mimetype="application/json")
-    if resp.status_code == 404:
+    if resp.status_code in {401, 404}:
         return abort(404, description=f"'{package}' not found at {ip}:{port}")
     abort(502, description=f"Unexpected response from node at {ip}:{port}")
 

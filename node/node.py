@@ -15,6 +15,26 @@ from flask import abort, Flask, jsonify, request, Response
 from hashlib import sha256
 
 
+def check_authorization_header(*mandatory_headers):
+    if not 'Authorization' in request.headers:
+        abort(401, description="No 'Authorization' header found in request.")
+    try:
+        is_valid = signatures.verify_authorization_header(
+            request.headers['Authorization'],
+            lambda keyID: config['C2_SECRET'] if keyID == "C2" else None,   
+            lambda h: request.headers.get(h),
+            request.method,
+            request.path,
+            request.query_string.decode(),
+            mandatory_headers)
+    except ValueError as e:
+        abort(401, description=str(e))
+    except Exception as e:
+        abort(401, description="Invalid 'Authorization' header.")
+    if not is_valid:
+        abort(401, description="Invalid signature.")
+
+
 app = Flask(__name__)
 
 
@@ -26,7 +46,7 @@ def bad_request(e):
 def unauthorized(e):
     res = jsonify(error=str(e))
     res.status_code = 401
-    res.headers['WWW-Authenticate'] = f'SECCHIWARE-HMAC-256 realm="Access to node"'
+    res.headers['WWW-Authenticate'] = 'SECCHIWARE-HMAC-256 realm="Access to node"'
     return res
 
 @app.errorhandler(404)
@@ -54,27 +74,10 @@ def install_test_sets():
     if not request.headers['Digest'].startswith("sha-256="):
         abort(400, description="Digest algorithm should be sha-256.")
     digest = b64encode(sha256(request.get_data()).digest()).decode()
-    print(digest)
     if digest != request.headers['Digest'].split("=", 1)[1]:
         abort(400, description="Given digest does not match content.")
 
-    if not 'Authorization' in request.headers:
-        abort(401, description="No 'Authorization' header found in request.")
-    try:
-        is_valid = signatures.verify_authorization_header(
-            request.headers['Authorization'],
-            lambda keyID: config['C2_SECRET'] if keyID == "C2" else None,   
-            lambda h: request.headers.get(h),
-            request.method,
-            request.path,
-            request.query_string.decode(),
-            ['Digest'])
-    except ValueError as e:
-        abort(401, description=str(e))
-    except Exception as e:
-        abort(401, description="Invalid 'Authorization' header.")
-    if not is_valid:
-        abort(401, description="Invalid signature.")
+    check_authorization_header("Digest")
 
     if not (request.files and 'packages' in request.files):
         abort(400, description="Invalid request's content")
@@ -96,6 +99,8 @@ def install_test_sets():
 @app.route("/test_sets/<package>", methods=["DELETE"])
 def delete_package(package):
     global installed
+
+    check_authorization_header()
 
     package_path = os.path.join(TESTS_PATH, package)
     if not os.path.isdir(package_path):
