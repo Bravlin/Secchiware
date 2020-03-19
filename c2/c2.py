@@ -41,6 +41,34 @@ def check_is_json():
     if not request.is_json:
         abort(415, description="Content Type is not application/json")
 
+def chech_digest_header():
+    if not 'Digest' in request.headers:
+        abort(400, description="'Digest' header mandatory.")
+    if not request.headers['Digest'].startswith("sha-256="):
+        abort(400, description="Digest algorithm should be sha-256.")
+    digest = b64encode(sha256(request.get_data()).digest()).decode()
+    if digest != request.headers['Digest'].split("=", 1)[1]:
+        abort(400, description="Given digest does not match content.")
+
+def check_authorization_header(*mandatory_headers):
+    if not 'Authorization' in request.headers:
+        abort(401, description="No 'Authorization' header found in request.")
+    try:
+        is_valid = signatures.verify_authorization_header(
+            request.headers['Authorization'],
+            lambda keyID: config['CLIENT_SECRET'] if keyID == "Client" else None,
+            lambda h: request.headers.get(h),
+            request.method,
+            request.path,
+            request.query_string.decode(),
+            mandatory_headers)
+    except ValueError as e:
+        abort(401, description=str(e))
+    except Exception as e:
+        abort(401, description="Invalid 'Authorization' header.")
+    if not is_valid:
+        abort(401, description="Invalid signature.")
+
 
 app = Flask(__name__)
 CORS(app, resources={
@@ -137,6 +165,8 @@ def list_installed_test_sets(ip, port):
 
 @app.route("/environments/<ip>/<port>/installed", methods=["PATCH"])
 def install_packages(ip, port):
+    chech_digest_header()
+    check_authorization_header("Digest")
     check_registered(ip, port)
     check_is_json()
 
@@ -161,7 +191,7 @@ def install_packages(ip, port):
             "/test_sets",
             signature_headers=headers,
             header_recoverer=lambda h: prepared.headers.get(h))
-        prepared.headers["Authorization"] =\
+        prepared.headers['Authorization'] =\
             signatures.new_authorization_header("C2", signature, headers)
 
         resp = rq.Session().send(prepared)
@@ -180,6 +210,7 @@ def install_packages(ip, port):
 
 @app.route("/environments/<ip>/<port>/installed/<package>", methods=["DELETE"])
 def delete_installed_package(ip, port, package):
+    check_authorization_header()
     check_registered(ip, port)
 
     signature = signatures.new_signature(
@@ -230,9 +261,6 @@ def execute_tests(ip, port):
 
 @app.route("/test_sets", methods=["GET"])
 def list_available_test_sets():
-    print(request.path)
-    print(request.query_string)
-    print(request.url)
     return jsonify(available.content)
 
 @app.route("/test_sets", methods=["PATCH"])
@@ -241,8 +269,10 @@ def upload_test_sets():
 
     if not request.mimetype == 'multipart/form-data':
         abort(415, description="Invalid request's content type")
+    chech_digest_header()
     if not (request.files and 'packages' in request.files):
         abort(400, description="'packages' key not found in request's body")
+    check_authorization_header("Digest")
     
     try:
         new_packages = test_utils.uncompress_test_packages(
@@ -263,6 +293,8 @@ def upload_test_sets():
 def delete_package(package):
     global available
 
+    check_authorization_header()
+
     package_path = os.path.join(TESTS_PATH, package)
     if not os.path.isdir(package_path):
         abort(404, description=f"Package '{package}' not found")
@@ -278,6 +310,7 @@ TESTS_PATH = os.path.join(SCRIPT_PATH, "test_sets")
 with open(os.path.join(SCRIPT_PATH, "config.json"), "r") as config_file:
     config = json.load(config_file)
 config['NODE_SECRET'] = config['NODE_SECRET'].encode()
+config['CLIENT_SECRET'] = config['CLIENT_SECRET'].encode()
 
 if not os.path.isdir(TESTS_PATH):
     os.mkdir(TESTS_PATH)
