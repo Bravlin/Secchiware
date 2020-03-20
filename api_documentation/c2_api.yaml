@@ -96,11 +96,11 @@ components:
           implementation: CPython
           version: 3.6.9
     HTTPError:
-      $ref: 'node_api.yaml#/components/schemas/HTTPError'
+      $ref: 'common.yaml#/components/schemas/HTTPError'
     TestsPackageInfo:
-      $ref: 'node_api.yaml#/components/schemas/TestsPackageInfo'
+      $ref: 'common.yaml#/components/schemas/TestsPackageInfo'
     TestReport:
-      $ref: 'node_api.yaml#/components/schemas/TestReport'
+      $ref: 'common.yaml#/components/schemas/TestReport'
   parameters:
     environmentIP:
       in: path
@@ -128,6 +128,21 @@ components:
           schema:
             type: string
           description: Provides cross origin access to the specified domain
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/HTTPError'
+    401Unauthorized:
+      description: Authorization failure
+      headers:
+        Access-Control-Allow-Origin:
+          schema:
+            type: string
+          description: Provides cross origin access to the specified domain
+        WWW-Authenticate:
+          schema:
+            type: string
+          description: Provides information about the security policy domain associated to the failed request
       content:
         application/json:
           schema:
@@ -187,6 +202,9 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/HTTPError'
+  securitySchemes:
+    SecchiwareAuth:
+      $ref: 'common.yaml#/components/securitySchemes/SecchiwareAuth'
 
 paths:
   /environments:
@@ -335,6 +353,8 @@ paths:
       parameters:
         - $ref: '#/components/parameters/environmentIP'
         - $ref: '#/components/parameters/environmentPort'
+      security:
+        - SecchiwareAuth: [Client]
       requestBody:
         required: true
         content:
@@ -355,6 +375,8 @@ paths:
               description: Provides cross origin access to the specified domain
         '400':
           $ref: '#/components/responses/400InvalidRequest'
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
         '404':
           $ref: '#/components/responses/404ResourceNotFound'
         '415':
@@ -372,6 +394,8 @@ paths:
         - $ref: '#/components/parameters/environmentIP'
         - $ref: '#/components/parameters/environmentPort'
         - $ref: '#/components/parameters/topPackage'
+      security:
+        - SecchiwareAuth: [Client]
       responses:
         '204':
           description: Package uninstalled successfully
@@ -380,6 +404,8 @@ paths:
               schema:
                 type: string
               description: Provides cross origin access to the specified domain
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
         '404':
           $ref: '#/components/responses/404ResourceNotFound'
         '502':
@@ -441,6 +467,14 @@ paths:
     patch:
       summary: Uploads new packages to the repository or updates existing ones.
       description: Endpoint to upload packages from a compressed file.
+      parameters:
+        - in: header
+          name: Digest
+          description: sha256 hash of the request's body
+          schema:
+            type: string
+          example: sha-256=U3dhZ2dlciByb2Nrcw==
+          required: true
       requestBody:
         required: true
         content:
@@ -454,6 +488,8 @@ paths:
                   description: File in tar.gz format
               required:
                 - packages
+      security:
+        - SecchiwareAuth: [Client]
       responses:
         '204':
           description: File correctly uncompressed and packages added or updated accordingly
@@ -464,6 +500,8 @@ paths:
               description: Provides cross origin access to the specified domain
         '400':
           $ref: '#/components/responses/400InvalidRequest'
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
         '415':
           $ref: '#/components/responses/415UnsupportedMediaType'
   /test_sets/{package}:
@@ -472,6 +510,8 @@ paths:
       description: Removes the given root package (including all its content) from the repository.
       parameters:
         - $ref: '#/components/parameters/topPackage'
+      security:
+        - SecchiwareAuth: [Client]
       responses:
         '204':
           description: Package deleted successfully
@@ -480,5 +520,7 @@ paths:
               schema:
                 type: string
               description: Provides cross origin access to the specified domain
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
         '404':
           $ref: '#/components/responses/404ResourceNotFound'

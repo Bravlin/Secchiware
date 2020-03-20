@@ -83,6 +83,13 @@ CORS(app, resources={
 def bad_request(e):
     return jsonify(error=str(e)), 400
 
+@app.errorhandler(401)
+def unauthorized(e):
+    res = jsonify(error=str(e))
+    res.status_code = 401
+    res.headers['WWW-Authenticate'] = 'SECCHIWARE-HMAC-256 realm="Access to C2"'
+    return res
+
 @app.errorhandler(404)
 def not_found(e):
     return jsonify(error=str(e)), 404

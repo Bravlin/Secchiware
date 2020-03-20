@@ -23,85 +23,26 @@ servers:
 components:
   schemas:
     HTTPError:
-      type: object
-      properties:
-        error:
-          type: string
-      required:
-        - error
+      $ref: 'common.yaml#/components/schemas/HTTPError'
     TestsPackageInfo:
-      type: object
-      properties:
-        name:
-          type: string
-        subpackages:
-          type: array
-          items:
-            $ref: '#/components/schemas/TestsPackageInfo'
-          uniqueItems: true
-        modules:
-          type: array
-          items:
-            type: object
-            properties:
-              name:
-                type: string
-              test_sets:
-                type: array
-                items:
-                  type: object
-                  properties:
-                    name:
-                      type: string
-                    tests:
-                      type: array
-                      items:
-                        type: string
-                      uniqueItems: true
-                  required:
-                    - name
-                uniqueItems: true
-            required:
-              - name
-          uniqueItems: true
-      required:
-        - name
-      example:
-        name: foo_package
-        modules:
-          - name: foo_module
-            test_sets:
-              name: FooSet
-              tests: ['foo', 'bar']
-        subpackages:
-          - name: foo_subpackage
-            modules:
-            - name: foo_submodule
-              test_sets:
-                name: FooSubSet
-                tests: ['subfoo', 'sub_bar']
+      $ref: 'common.yaml#/components/schemas/TestsPackageInfo'
     TestReport:
-      type: object
-      properties:
-        test_name:
-          type: string
-        test_description:
-          type: string
-        result_code:
-          type: integer
-        additional_info:
-          type: object
-          additionalProperties: true
-      required:
-        - test_name
-        - test_description
-        - result_code
-      example:
-        test_name: foo
-        test_description: bar
-        result_code: 0
-        additional_info:
-          - some_key: value
+      $ref: 'common.yaml#/components/schemas/TestReport'
+  securitySchemes:
+    SecchiwareAuth:
+      $ref: 'common.yaml#/components/securitySchemes/SecchiwareAuth'
+  responses:
+    401Unauthorized:
+      description: Authorization failure
+      headers:
+        WWW-Authenticate:
+          schema:
+            type: string
+          description: Provides information about the security policy domain associated to the failed request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/HTTPError'
 
 paths:
   /report:
@@ -198,6 +139,14 @@ paths:
     patch:
       summary: Uploads new packages or updates existing ones.
       description: Endpoint to upload packages from a compressed file.
+      parameters:
+        - in: header
+          name: Digest
+          description: sha256 hash of the request's body
+          schema:
+            type: string
+          example: sha-256=U3dhZ2dlciByb2Nrcw==
+          required: true
       requestBody:
         required: true
         content:
@@ -211,6 +160,8 @@ paths:
                   description: File in tar.gz format
               required:
                 - packages
+      security:
+        - SecchiwareAuth: [C2]
       responses:
         '204':
           description: File correctly uncompressed and packages added or updated accordingly
@@ -220,6 +171,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPError'
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
         '415':
           description: Invalid request's content type
           content:
@@ -238,9 +191,13 @@ paths:
           type: string
         description: The root package name.
         example: a_package
+      security:
+        - SecchiwareAuth: [C2]
       responses:
         '204':
           description: Package deleted successfully
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
         '404':
           description: Package not found
           content:

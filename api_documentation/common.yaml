@@ -1,0 +1,101 @@
+components:
+  schemas:
+    HTTPError:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+    TestsPackageInfo:
+      type: object
+      properties:
+        name:
+          type: string
+        subpackages:
+          type: array
+          items:
+            $ref: '#/components/schemas/TestsPackageInfo'
+          uniqueItems: true
+        modules:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              test_sets:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    name:
+                      type: string
+                    tests:
+                      type: array
+                      items:
+                        type: string
+                      uniqueItems: true
+                  required:
+                    - name
+                uniqueItems: true
+            required:
+              - name
+          uniqueItems: true
+      required:
+        - name
+      example:
+        name: foo_package
+        modules:
+          - name: foo_module
+            test_sets:
+              name: FooSet
+              tests: ['foo', 'bar']
+        subpackages:
+          - name: foo_subpackage
+            modules:
+            - name: foo_submodule
+              test_sets:
+                name: FooSubSet
+                tests: ['subfoo', 'sub_bar']
+    TestReport:
+      type: object
+      properties:
+        test_name:
+          type: string
+        test_description:
+          type: string
+        result_code:
+          type: integer
+        additional_info:
+          type: object
+          additionalProperties: true
+      required:
+        - test_name
+        - test_description
+        - result_code
+      example:
+        test_name: foo
+        test_description: bar
+        result_code: 0
+        additional_info:
+          - some_key: value
+  securitySchemes:
+    SecchiwareAuth:
+      type: http
+      scheme: secchiware-hmac-256
+      description: > 
+        Format: SECCHIWARE-HMAC-256 keyId={keyId},[headers={headers}],signature={signature}
+        Parameters:
+          keyId: a opaque string identifier that helps the server find the necessary credentials to validate the signature.
+          headers: A list of the names of the headers whose values where used to generate the signature, in lowercase.
+          signature: a base 64 encoded string of the hmac-256 hash generated with the necessary credentials following the algorithm explained next.
+        Algorithm:
+          1- Create an empty string.
+          2- Append the method of the request in lowercase followed by a newline character ('\n').
+          3- Append the canonical URI (path from host, without query string) of the request followed by a newline character ('\n').
+          4- If there is a query string, append it URL-encoded (space=%20) followed by a newline character ('\n').
+          5- For every header specified, append the following expression: "{header_name}: {header_value}\n",
+            where header_name is the key of the header in lowercase and header_value is its corresponding value.
+            For the last header the trailing newline character MUST be omitted.
+          6- Calculate the hmac-256 hash of the generated string and base 64 encode it to obtain the signature.
