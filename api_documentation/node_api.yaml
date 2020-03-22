@@ -134,10 +134,7 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/EnvironmentPlatformInformation'
-                uniqueItems: true
+                $ref: '#/components/schemas/EnvironmentPlatformInformation'
   /test_sets:
     get:
       summary: Gets all installed root packages in the node.

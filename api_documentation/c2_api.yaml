@@ -61,7 +61,18 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/HTTPError'
-    401Unauthorized:
+    401UnauthorizedNode:
+      description: Authorization failure
+      headers:
+        WWW-Authenticate:
+          schema:
+            type: string
+          description: Provides information about the security policy domain associated to the failed request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/HTTPError'
+    401UnauthorizedClient:
       description: Authorization failure
       headers:
         Access-Control-Allow-Origin:
@@ -180,7 +191,7 @@ paths:
           example: sha-256=U3dhZ2dlciByb2Nrcw==
           required: true
       security:
-        - SecchiwareAuth: [Client]
+        - SecchiwareAuth: [Node]
       requestBody:
         required: true
         content:
@@ -206,6 +217,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPError'
+        '401':
+          $ref: '#/components/responses/401UnauthorizedNode'
         '415':
           description: Format of the request's payload is not supported
           content:
@@ -216,13 +229,15 @@ paths:
     delete:
       summary: Allows the node at ip:port to unregister itself.
       security:
-        - SecchiwareAuth: [Client]
+        - SecchiwareAuth: [Node]
       parameters:
         - $ref: '#/components/parameters/environmentIP'
         - $ref: '#/components/parameters/environmentPort'
       responses:
         '204':
           description: Environment removed successfully
+        '401':
+          $ref: '#/components/responses/401UnauthorizedNode'
         '404':
           $ref: '#/components/responses/404ResourceNotFound'
   /environments/{ip}/{port}/info:
@@ -307,7 +322,7 @@ paths:
         '400':
           $ref: '#/components/responses/400InvalidRequest'
         '401':
-          $ref: '#/components/responses/401Unauthorized'
+          $ref: '#/components/responses/401UnauthorizedClient'
         '404':
           $ref: '#/components/responses/404ResourceNotFound'
         '415':
@@ -336,7 +351,7 @@ paths:
                 type: string
               description: Provides cross origin access to the specified domain
         '401':
-          $ref: '#/components/responses/401Unauthorized'
+          $ref: '#/components/responses/401UnauthorizedClient'
         '404':
           $ref: '#/components/responses/404ResourceNotFound'
         '502':
@@ -432,7 +447,7 @@ paths:
         '400':
           $ref: '#/components/responses/400InvalidRequest'
         '401':
-          $ref: '#/components/responses/401Unauthorized'
+          $ref: '#/components/responses/401UnauthorizedClient'
         '415':
           $ref: '#/components/responses/415UnsupportedMediaType'
   /test_sets/{package}:
@@ -452,6 +467,6 @@ paths:
                 type: string
               description: Provides cross origin access to the specified domain
         '401':
-          $ref: '#/components/responses/401Unauthorized'
+          $ref: '#/components/responses/401UnauthorizedClient'
         '404':
           $ref: '#/components/responses/404ResourceNotFound'
