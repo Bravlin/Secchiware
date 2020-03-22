@@ -15,6 +15,13 @@ from flask_cors import CORS
 from hashlib import sha256
 
 
+def client_key_recoverer(key_id):
+    return config['CLIENT_SECRET'] if key_id == "Client" else None
+
+def node_key_recoverer(key_id):
+    return config['NODE_SECRET'] if key_id == "Node" else None
+
+
 def check_registered(ip, port):
     """Verifies if the given ip and port correspond to an active environment.
 
@@ -41,7 +48,7 @@ def check_is_json():
     if not request.is_json:
         abort(415, description="Content Type is not application/json")
 
-def chech_digest_header():
+def check_digest_header():
     if not 'Digest' in request.headers:
         abort(400, description="'Digest' header mandatory.")
     if not request.headers['Digest'].startswith("sha-256="):
@@ -50,13 +57,13 @@ def chech_digest_header():
     if digest != request.headers['Digest'].split("=", 1)[1]:
         abort(400, description="Given digest does not match content.")
 
-def check_authorization_header(*mandatory_headers):
+def check_authorization_header(key_recoverer, *mandatory_headers):
     if not 'Authorization' in request.headers:
         abort(401, description="No 'Authorization' header found in request.")
     try:
         is_valid = signatures.verify_authorization_header(
             request.headers['Authorization'],
-            lambda keyID: config['CLIENT_SECRET'] if keyID == "Client" else None,
+            key_recoverer,
             lambda h: request.headers.get(h),
             request.method,
             request.path,
@@ -121,10 +128,10 @@ def list_environments():
 
 @app.route("/environments", methods=["POST"])
 def add_environment():
+    check_digest_header()
+    check_authorization_header(node_key_recoverer, "Digest")
     check_is_json()
-    if not ('ip' in request.json
-            and 'port' in request.json
-            and 'platform' in request.json):
+    if not ('ip' in request.json and 'port' in request.json):
         abort(400, description="One or more keys missing in request's body")
 
     ip = request.json['ip']
@@ -135,7 +142,6 @@ def add_environment():
     environments[ip][port] = {
         'session_start': datetime.now().strftime("%Y/%m/%d, %H:%M:%S")
     }
-    environments[ip][port]['info'] = request.json['platform']
 
     return Response(status=204, mimetype="application/json")
 
@@ -143,6 +149,7 @@ def add_environment():
 def remove_environment(ip, port):
     global environments
 
+    check_authorization_header(node_key_recoverer)
     check_registered(ip, port)
     
     del environments[ip][port]
@@ -154,7 +161,16 @@ def remove_environment(ip, port):
 @app.route("/environments/<ip>/<port>/info", methods=["GET"])
 def get_environment_info(ip, port):
     check_registered(ip, port)
-    return jsonify(environments[ip][port]['info'])
+    
+    try:
+        resp = rq.get(f"http://{ip}:{port}/info")
+    except rq.exceptions.ConnectionError:
+        abort(504,
+            description="The requested environment could not be reached")
+
+    if resp.status_code == 200:
+        return jsonify(resp.json())
+    abort(502, description=f"Unexpected response from node at {ip}:{port}")
     
 @app.route("/environments/<ip>/<port>/installed", methods=["GET"])
 def list_installed_test_sets(ip, port):
@@ -172,8 +188,8 @@ def list_installed_test_sets(ip, port):
 
 @app.route("/environments/<ip>/<port>/installed", methods=["PATCH"])
 def install_packages(ip, port):
-    chech_digest_header()
-    check_authorization_header("Digest")
+    check_digest_header()
+    check_authorization_header(client_key_recoverer, "Digest")
     check_registered(ip, port)
     check_is_json()
 
@@ -217,7 +233,7 @@ def install_packages(ip, port):
 
 @app.route("/environments/<ip>/<port>/installed/<package>", methods=["DELETE"])
 def delete_installed_package(ip, port, package):
-    check_authorization_header()
+    check_authorization_header(client_key_recoverer)
     check_registered(ip, port)
 
     signature = signatures.new_signature(
@@ -276,10 +292,10 @@ def upload_test_sets():
 
     if not request.mimetype == 'multipart/form-data':
         abort(415, description="Invalid request's content type")
-    chech_digest_header()
+    check_digest_header()
     if not (request.files and 'packages' in request.files):
         abort(400, description="'packages' key not found in request's body")
-    check_authorization_header("Digest")
+    check_authorization_header(client_key_recoverer, "Digest")
     
     try:
         new_packages = test_utils.uncompress_test_packages(
@@ -300,7 +316,7 @@ def upload_test_sets():
 def delete_package(package):
     global available
 
-    check_authorization_header()
+    check_authorization_header(client_key_recoverer)
 
     package_path = os.path.join(TESTS_PATH, package)
     if not os.path.isdir(package_path):

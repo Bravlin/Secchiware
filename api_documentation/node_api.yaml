@@ -22,6 +22,8 @@ servers:
 
 components:
   schemas:
+    EnvironmentPlatformInformation:
+      $ref: 'common.yaml#/components/schemas/EnvironmentPlatformInformation'
     HTTPError:
       $ref: 'common.yaml#/components/schemas/HTTPError'
     TestsPackageInfo:
@@ -122,6 +124,20 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPError'
+  /info:
+    get:
+      summary: Gets information about the environment's platform.
+      description: Returns a dictionary containing minimal information about the environment's hardware, operating system and Python interpreter.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EnvironmentPlatformInformation'
+                uniqueItems: true
   /test_sets:
     get:
       summary: Gets all installed root packages in the node.

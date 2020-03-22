@@ -57,6 +57,9 @@ def not_found(e):
 def unsupported_media_type(e):
     return jsonify(error=str(e)), 415
 
+@app.route("/info", methods=["GET"])
+def recover_platform_info():
+    return jsonify(get_platform_info())
 
 @app.route("/test_sets", methods=["GET"])
 def list_installed_test_sets():
@@ -163,24 +166,46 @@ def get_platform_info():
     return info
 
 def connect_to_c2():
+    prepared = rq.Request(
+        "POST",
+        f"{config['C2_URL']}/environments",
+        json={
+            'ip': config['IP'],
+            'port': config['PORT']
+        }).prepare()
+
+    digest = b64encode(sha256(prepared.body).digest()).decode()
+    prepared.headers['Digest'] = f"sha-256={digest}"
+
+    headers = ['Digest']
+    signature = signatures.new_signature(
+        config['C2_SECRET'],
+        "POST",
+        "/environments",
+        signature_headers=headers,
+        header_recoverer=lambda h: prepared.headers.get(h))
+    prepared.headers['Authorization'] =\
+        signatures.new_authorization_header("Node", signature, headers)
+
     try:
-        resp = rq.post(
-            f"{config['C2_URL']}/environments",
-            json={
-                'ip': config['IP'],
-                'port': config['PORT'],
-                'platform': get_platform_info()
-            }
-        )
+        resp = rq.Session().send(prepared)
     except rq.exceptions.ConnectionError:
-        return False      
+        return False     
     return resp.status_code == 204
 
 def exit_gracefully(sig, frame):
     print("Exiting...")
+
+    signature = signatures.new_signature(
+        config['C2_SECRET'],
+        "DELETE",
+        f"/environments/{config['IP']}/{config['PORT']}")
+    authorization_content = signatures.new_authorization_header("Node", signature)
+
     try:
         resp = rq.delete(
-            f"{config['C2_URL']}/environments/{config['IP']}/{config['PORT']}")
+            f"{config['C2_URL']}/environments/{config['IP']}/{config['PORT']}",
+            headers={'Authorization': authorization_content})
         resp.raise_for_status()
     except rq.exceptions.ConnectionError:
         print("Could not contact Command and Control server before exiting.")
@@ -214,4 +239,4 @@ if __name__ == "__main__":
     else:
         print("Connection refused.\n\nExecuting installed tests...\n\n")
         tests = test_utils.TestSetCollection("test_sets")
-        print(json.dumps(tests.run_all_tests()))
+        print(json.dumps(tests.run_all_tests(), indent=2))

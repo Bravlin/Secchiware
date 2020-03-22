@@ -100,9 +100,9 @@ def lsenv():
         print("Connection refused.")
     else:
         envs = resp.json()
-        for ip in envs:
-            for port in envs[ip]:
-                print(ip + ":" + port)
+        for ip, ports in envs.items():
+            for port, content in ports.items():
+                print(f"{ip}:{port} {content['session_start']}")
 
 @main.command("info")
 @click.argument("ip")
