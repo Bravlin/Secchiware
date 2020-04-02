@@ -1,6 +1,6 @@
 from test_utils import TestResult, TestSet, test
 
-class DebugSet(TestSet):
+class MonitoringSet(TestSet):
 
     @test(
         name="Is tracer attached?",

@@ -172,7 +172,7 @@ def install(password, ip, port, packages):
     except requests.exceptions.ConnectionError:
         print("Connection refused.")
     else:
-        if resp.status_code in {401, 404, 415, 500, 502, 504}:
+        if resp.status_code in {400, 401, 404, 415, 500, 502, 504}:
             print(resp.json()['error'])
         elif resp.status_code != 204:
             print("Unexpected response from Command and Control Sever.")
