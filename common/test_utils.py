@@ -6,6 +6,7 @@ from abc import ABC
 from importlib import import_module
 from functools import wraps
 from pkgutil import iter_modules, walk_packages
+from time import time
 from typing import Any, BinaryIO, Callable, List, Tuple, Union
 
 TestResult = Union[int, Tuple[int, dict]]
@@ -53,7 +54,9 @@ def test(name: str, description: str) -> Callable:
         @wraps(method)
         def wrapper(self: TestSet) -> Callable:
             report = {}
+            report['timestamp_start'] = time()
             result = method(self)
+            report['timestamp_end'] = time()
 
             if isinstance(result, int):
                 report['result_code'] = result
