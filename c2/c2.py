@@ -140,7 +140,7 @@ def add_environment():
     if not ip in environments:
         environments[ip] = {}
     environments[ip][port] = {
-        'session_start': datetime.now().strftime("%Y/%m/%d, %H:%M:%S")
+        'session_start': datetime.utcnow().isoformat("T") + "Z"
     }
 
     return Response(status=204, mimetype="application/json")

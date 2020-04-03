@@ -143,14 +143,24 @@ components:
         additional_info:
           type: object
           additionalProperties: true
+        timestamp_start:
+          type: string
+          format: date-time
+        timestamp_end:
+          type: string
+          format: date-time
       required:
         - test_name
         - test_description
         - result_code
+        - timestamp_start
+        - timestamp_end
       example:
         test_name: foo
         test_description: bar
         result_code: 0
+        timestamp_start: 2020-04-02T16:20:06.079646Z
+        timestamp_end: 2020-04-02T16:20:06.079849Z
         additional_info:
           - some_key: value
   securitySchemes:

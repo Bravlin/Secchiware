@@ -6,9 +6,9 @@ class MonitoringSet(TestSet):
         name="Is tracer attached?",
         description="Looks for a TracerPid different than 0.")
     def is_tracer_attached(self) -> TestResult:
-        f = open("/proc/self/status", "r")
-        for line in f:
-            if line.startswith("TracerPid"): break
+        with open("/proc/self/status", "r") as f:
+            for line in f:
+                if line.startswith("TracerPid"): break
         additional_info = {
             'found_line': line
         }

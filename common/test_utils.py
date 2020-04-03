@@ -4,9 +4,9 @@ import tarfile
 
 from abc import ABC
 from importlib import import_module
+from datetime import datetime
 from functools import wraps
 from pkgutil import iter_modules, walk_packages
-from time import time
 from typing import Any, BinaryIO, Callable, List, Tuple, Union
 
 TestResult = Union[int, Tuple[int, dict]]
@@ -54,9 +54,9 @@ def test(name: str, description: str) -> Callable:
         @wraps(method)
         def wrapper(self: TestSet) -> Callable:
             report = {}
-            report['timestamp_start'] = time()
+            report['timestamp_start'] = datetime.utcnow().isoformat("T") + "Z"
             result = method(self)
-            report['timestamp_end'] = time()
+            report['timestamp_end'] = datetime.utcnow().isoformat("T") + "Z"
 
             if isinstance(result, int):
                 report['result_code'] = result

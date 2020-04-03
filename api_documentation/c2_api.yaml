@@ -37,6 +37,7 @@ components:
       required: true
       schema:
         type: string
+        format: ipv4
       description: The ip of a registered environment.
       example: 192.168.0.14
     environmentPort:
@@ -170,16 +171,16 @@ paths:
                     properties:
                       session_start:
                         type: string
-                        format: custom_date
+                        format: date-time
                     required:
                       - session_start
               example:
                 192.168.0.14:
                     5100:
-                      session_start: 2020/02/02, 20:20:20
+                      session_start: 2020-04-02T23:58:44.115677Z
                 192.168.0.19:
                     4900:
-                      session_start: 2020/02/02, 20:22:20
+                      session_start: 2020-04-03T00:02:06.121104Z
     post:
       summary: Endpoint that allows a node to register itself.
       parameters:
@@ -201,6 +202,7 @@ paths:
               properties:
                 ip:
                   type: string
+                  format: ipv4
                   example: 192.168.0.14
                 port:
                   type: string
