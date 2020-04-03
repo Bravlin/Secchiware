@@ -94,8 +94,11 @@ def install_test_sets():
     
     new_info = []
     for new_pack in new_packages:
+        new_pack = f"test_sets.{new_pack}"
+        # If it is a new version, the next sentence removes the old one
+        test_utils.clean_package(new_pack)
         new_info.append(
-            test_utils.get_installed_package(f"test_sets.{new_pack}"))
+            test_utils.get_installed_package(new_pack))
     installed.batch_insert(new_info)
     return Response(status=204, mimetype="application/json")
 

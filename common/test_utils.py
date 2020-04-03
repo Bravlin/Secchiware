@@ -1,5 +1,6 @@
 import inspect
 import os
+import sys
 import tarfile
 
 from abc import ABC
@@ -381,6 +382,23 @@ def get_installed_test_sets(root_package: str) -> List[dict]:
         if is_pkg:
             installed.append(get_installed_package(name))
     return installed
+
+def clean_package(package_name: str) -> None:
+    """ Removes the given package and all its content from the cache.
+
+    It ignores any package or module found that is not present in sys.modules.
+    """
+
+    if package_name in sys.modules:
+        package = import_module(package_name)
+        for _, name, is_pkg in iter_modules(
+                package.__path__,
+                package.__name__ + '.'):
+            if is_pkg:
+                clean_package(name)
+            elif name in sys.modules:
+                del sys.modules[name]
+        del sys.modules[package_name]
 
 def compress_test_packages(
         file_object: BinaryIO,

@@ -9,9 +9,9 @@ class MonitoringSet(TestSet):
         with open("/proc/self/status", "r") as f:
             for line in f:
                 if line.startswith("TracerPid"): break
-        additional_info = {
-            'found_line': line
-        }
         pid = int(line.split()[-1])
+        additional_info = {
+            'found_pid': pid
+        }
         result = 1 if pid == 0 else -1
         return result, additional_info
