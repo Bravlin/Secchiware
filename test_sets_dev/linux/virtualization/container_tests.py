@@ -3,6 +3,7 @@ import re
 
 from test_utils import TestResult, TestSet, test
 
+
 class ContainerSet(TestSet):
 
     @test(
@@ -27,6 +28,20 @@ class ContainerSet(TestSet):
                 if re.match("0+ ", line) is None:
                     return 1
         return -1
+
+    @test(
+        name="Is the firts process an init?",
+        description="Verifies that the name of the process with PID 1 corresponds to a well known init.")
+    def is_first_process_an_init(self) -> TestSet:
+        known_inits = {"systemd", "upstart", "sysv-init"}
+        with open("/proc/1/sched", "r") as f:
+            process_name = f.readline().split(" ")[0]
+        additional_info = {
+            'found_process_name': process_name
+        }
+        result = -1 if process_name in known_inits else 1
+        return result, additional_info
+
 
 class DockerSet(TestSet):
 

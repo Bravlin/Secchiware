@@ -1,6 +1,7 @@
 from test_utils import TestResult, TestSet, test
 from time import sleep
 
+
 class QPython3CommunicationSet(TestSet):
 
     def __init__(self):

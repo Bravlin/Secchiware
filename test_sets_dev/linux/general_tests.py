@@ -2,6 +2,7 @@ import os
 
 from test_utils import TestResult, TestSet, test
 
+
 class MonitoringSet(TestSet):
 
     @test(
@@ -17,6 +18,7 @@ class MonitoringSet(TestSet):
         }
         result = 1 if pid == 0 else -1
         return result, additional_info
+
 
 class HooksAndInjectedLibrariesSet(TestSet):
 
