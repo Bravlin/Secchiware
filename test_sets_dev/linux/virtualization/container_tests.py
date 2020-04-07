@@ -30,7 +30,7 @@ class ContainerSet(TestSet):
         return -1
 
     @test(
-        name="Is the firts process an init?",
+        name="Is the first process an init?",
         description="Verifies that the name of the process with PID 1 corresponds to a well known init.")
     def is_first_process_an_init(self) -> TestSet:
         known_inits = {"systemd", "upstart", "sysv-init"}
@@ -39,7 +39,7 @@ class ContainerSet(TestSet):
         additional_info = {
             'found_process_name': process_name
         }
-        result = -1 if process_name in known_inits else 1
+        result = 1 if process_name in known_inits else -1
         return result, additional_info
 
 
