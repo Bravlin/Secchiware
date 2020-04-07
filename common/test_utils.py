@@ -1,5 +1,6 @@
 import inspect
 import os
+import shutil
 import sys
 import tarfile
 
@@ -501,5 +502,12 @@ def uncompress_test_packages(file_object: BinaryIO, tests_root: str) -> List[str
                     raise ValueError(
                         f"Found top level member {member} is not a package.")
                 new_packages.append(member.name)
+
+        for np in new_packages:
+            package_path = os.path.join(tests_root, np)
+            # If the package existed beforehand, it first gets deleted
+            if os.path.isdir(package_path):
+                shutil.rmtree(package_path)
         tar.extractall(tests_root)
+
     return new_packages
