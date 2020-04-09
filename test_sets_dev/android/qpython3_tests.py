@@ -65,7 +65,8 @@ class QPython3EmulatorSet(TestSet):
 
     @test(
         name="Does the network operator name correspond to an emulator?",
-        description="Checks the device's network operator's name against 'Android'.")
+        description=
+            "Checks the device's network operator's name against'Android'.")
     def network_operator_name_from_emulator(self) -> TestResult:
         name = self.droid.getNetworkOperatorName().result
         additional_info = {

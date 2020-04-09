@@ -24,7 +24,9 @@ class HooksAndInjectedLibrariesSet(TestSet):
 
     @test(
         name="Is LD_PRELOAD present?",
-        description="Checks if the process was started with the LD_PRELOAD environment variable")
+        description=
+            "Checks if the process was started with the LD_PRELOAD "\
+            "environment variable")
     def ld_preload_present(self) -> TestResult:
         if 'LD_PRELOAD' in os.environ:
             additional_info = {

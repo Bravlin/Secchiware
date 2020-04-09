@@ -10,7 +10,9 @@ class DebuggerSet(TestSet):
 
     @test(
         name="Execute INT 2Dh instruction.",
-        description="Verifies if a debugger is attached to the process by observing the handling of a breakpoint.")
+        description=
+            "Verifies if a debugger is attached to the process by "\
+            "observing the handling of a breakpoint.")
     def int2dh(self) -> TestResult:
         exe_path = os.path.join(self.bin_dir, "int2dh.exe")
         process = os.popen(exe_path)

@@ -8,7 +8,9 @@ class ContainerSet(TestSet):
 
     @test(
         name="Read kallsyms",
-        description="Verifies that if the user is root, then addresses in '/proc/kallsyms' should all not be 0.")
+        description=
+            "Verifies that if the user is root, then addresses in "\
+            "'/proc/kallsyms' should all not be 0.")
     def read_kallsyms(self) -> TestResult:
         process = os.popen("whoami")
         user = process.read().rstrip()
@@ -31,7 +33,9 @@ class ContainerSet(TestSet):
 
     @test(
         name="Is the first process an init?",
-        description="Verifies that the name of the process with PID 1 corresponds to a well known init.")
+        description=
+            "Verifies that the name of the process with PID 1 corresponds to"\
+            "a well known init.")
     def is_first_process_an_init(self) -> TestSet:
         known_inits = {"systemd", "upstart", "sysv-init"}
         with open("/proc/1/sched", "r") as f:
