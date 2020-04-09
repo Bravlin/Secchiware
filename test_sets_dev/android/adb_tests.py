@@ -15,10 +15,10 @@ class ADBEmulatorSet(TestSet):
             additional_info = {
                 'error': "The test could not be fulfilled."
             }
-            return 0, additional_info
+            return TestSet.TEST_INCONCLUSIVE, additional_info
         if brand == "generic":
-            return -1
-        return 1
+            return TestSet.TEST_FAILED
+        return TestSet.TEST_PASSED
 
     @test(
         name="Does the manufacturer correspond to an emulator?",
@@ -30,7 +30,7 @@ class ADBEmulatorSet(TestSet):
             additional_info = {
                 'error': "The test could not be fulfilled."
             }
-            return 0, additional_info
+            return TestSet.TEST_INCONCLUSIVE, additional_info
         if brand == "unknown":
-            return -1
-        return 1
+            return TestSet.TEST_FAILED
+        return TestSet.TEST_PASSED

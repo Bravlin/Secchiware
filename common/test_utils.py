@@ -111,6 +111,10 @@ def is_test_method(x: Any) -> bool:
 class TestSet(ABC):
     """Base class that provides a common interface for all test sets."""
 
+    TEST_PASSED = 1
+    TEST_FAILED = -1
+    TEST_INCONCLUSIVE = 0
+
     @staticmethod
     def is_strict_subclass(x: Any) -> bool:
         """

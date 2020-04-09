@@ -15,5 +15,7 @@ class DebuggerSet(TestSet):
         exe_path = os.path.join(self.bin_dir, "int2dh.exe")
         process = os.popen(exe_path)
         if process.close() is None:
-            return -1
-        return 1
+            # There was no error, so a debugger was detected
+            return TestSet.TEST_FAILED
+        # It crashed, so there was no debugger
+        return TestSet.TEST_PASSED

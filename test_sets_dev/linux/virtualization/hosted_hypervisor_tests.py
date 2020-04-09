@@ -12,5 +12,8 @@ class X86VirtualizationSet(TestSet):
         additional_info = {
             'found_product_name': product_name
         }
-        result = -1 if product_name in {'VirtualBox', 'VMWare'} else 1
+        if product_name in {'VirtualBox', 'VMWare'}:
+            result = TestSet.TEST_FAILED
+        else:
+            result = TestSet.TEST_PASSED
         return result, additional_info

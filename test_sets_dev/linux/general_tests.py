@@ -16,7 +16,7 @@ class MonitoringSet(TestSet):
         additional_info = {
             'found_pid': pid
         }
-        result = 1 if pid == 0 else -1
+        result = TestSet.TEST_PASSED if pid == 0 else TestSet.TEST_FAILED
         return result, additional_info
 
 
@@ -30,5 +30,5 @@ class HooksAndInjectedLibrariesSet(TestSet):
             additional_info = {
                 'found_libraries': os.environ['LD_PRELOAD']
             }
-            return -1, additional_info
-        return 1
+            return TestSet.TEST_FAILED, additional_info
+        return TestSet.TEST_PASSED

@@ -17,17 +17,17 @@ class ContainerSet(TestSet):
             additional_info = {
                 'error': "User name could not be queried."
             }
-            return 0, additional_info
+            return TestSet.TEST_INCONCLUSIVE, additional_info
         if user != "root":
             additional_info = {
                 'error': "User name is not root."
             }
-            return 0, additional_info
+            return TestSet.TEST_INCONCLUSIVE, additional_info
         with open("/proc/kallsyms", "r") as f:
             for line in f:
                 if re.match("0+ ", line) is None:
-                    return 1
-        return -1
+                    return TestSet.TEST_PASSED
+        return TestSet.TEST_FAILED
 
     @test(
         name="Is the first process an init?",
@@ -39,7 +39,10 @@ class ContainerSet(TestSet):
         additional_info = {
             'found_process_name': process_name
         }
-        result = 1 if process_name in known_inits else -1
+        if process_name in known_inits:
+            result = TestSet.TEST_PASSED
+        else:
+            result = TestSet.TEST_FAILED
         return result, additional_info
 
 
@@ -49,4 +52,6 @@ class DockerSet(TestSet):
         name="Is '.dockerenv' present?",
         description="Looks for a file named .dockerenv in directory '/'.")
     def dockerenv_present(self) -> TestResult:
-        return -1 if os.path.isfile("/.dockerenv") else 1
+        if os.path.isfile("/.dockerenv"):
+            return TestSet.TEST_FAILED
+        return TestSet.TEST_PASSED

@@ -17,7 +17,7 @@ class QPython3CommunicationSet(TestSet):
         additional_info = {
             'found_contacts': count
         }
-        result = 1 if count >= 5 else -1
+        result = TestSet.TEST_PASSED if count >= 5 else TestSet.TEST_FAILED
         return result, additional_info
 
     @test(
@@ -28,7 +28,7 @@ class QPython3CommunicationSet(TestSet):
         additional_info = {
             'found_messages': count
         }
-        result = 1 if count >= 5 else -1
+        result = TestSet.TEST_PASSED if count >= 5 else TestSet.TEST_FAILED
         return result, additional_info
         
     @test(
@@ -41,9 +41,9 @@ class QPython3CommunicationSet(TestSet):
             sleep(1)
             i += 1
         if i <= 9 or self.droid.readPhoneState().result['state'] != "idle":
-            result = 1
+            result = TestSet.TEST_PASSED
         else:
-            result = -1
+            result = TestSet.TEST_FAILED
         self.droid.stopTrackingPhoneState()
         return result
 
@@ -60,8 +60,8 @@ class QPython3EmulatorSet(TestSet):
         description="Checks the device's IMEI against '000000000000000'.")
     def imei_from_emulator(self) -> TestResult:
         if self.droid.getDeviceId().result == "000000000000000":
-            return -1
-        return 1
+            return TestSet.TEST_FAILED
+        return TestSet.TEST_PASSED
 
     @test(
         name="Does the network operator name correspond to an emulator?",
@@ -72,8 +72,8 @@ class QPython3EmulatorSet(TestSet):
             'found_network_operator': name
         }
         if name == "Android":
-            return -1, additional_info
-        return 1, additional_info
+            return TestSet.TEST_FAILED, additional_info
+        return TestSet.TEST_PASSED, additional_info
 
     @test(
         name="Does the device have a bluetooth adapter?",
@@ -81,5 +81,5 @@ class QPython3EmulatorSet(TestSet):
     def has_bluetooth(self) -> TestResult:
         address = self.droid.bluetoothGetLocalAddress().result
         if address:
-            return 1
-        return -1
+            return TestSet.TEST_PASSED
+        return TestSet.TEST_FAILED

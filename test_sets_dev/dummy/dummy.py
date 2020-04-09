@@ -4,4 +4,4 @@ class DummySet(TestSet):
 
     @test(name="Dummy", description="Dummy")
     def dummy(self):
-        return 0
+        return TestSet.TEST_INCONCLUSIVE

@@ -13,10 +13,10 @@ class SystemdSet(TestSet):
         virt = process.read().rstrip()
         process.close()
         if not virt:
-            return 0
+            return TestSet.TEST_INCONCLUSIVE
         if virt == "none":
-            return 1
+            return TestSet.TEST_PASSED
         additional_info = {
             'virtualization_type': virt
         }
-        return -1, additional_info
+        return TestSet.TEST_FAILED, additional_info
