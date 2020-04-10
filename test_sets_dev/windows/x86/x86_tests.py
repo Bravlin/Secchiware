@@ -2,6 +2,7 @@ import os
 
 from test_utils import TestResult, TestSet, test
 
+
 class DebuggerSet(TestSet):
 
     def __init__(self):

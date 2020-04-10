@@ -59,3 +59,22 @@ class DockerSet(TestSet):
         if os.path.isfile("/.dockerenv"):
             return TestSet.TEST_FAILED
         return TestSet.TEST_PASSED
+
+    @test(
+        name="Does the host contain an IP typical for Docker?",
+        description=
+            "Looks for IPs like '172.17.x.x' using the command 'ip addr show'.")
+    def docker_like_ip(self) -> TestResult:
+        process = os.popen("ip addr show")
+        for line in process:
+            if line.startswith("inet"):
+                ip = line.split(" ")[1].split("/")[0]
+                if ip.startswith("172.17."):
+                    additional_info = {
+                        'found_ip': ip
+                    }
+                    process.close()
+                    return TestSet.TEST_FAILED, additional_info
+        if not process.close() is None:
+            return TestSet.TEST_INCONCLUSIVE
+        return TestSet.TEST_PASSED

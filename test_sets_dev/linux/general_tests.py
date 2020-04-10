@@ -67,4 +67,21 @@ class NetworkingSet(TestSet):
             if os.path.isfile(os.path.join(path, e)):
                 return TestSet.TEST_PASSED
         return TestSet.TEST_FAILED
-        
+
+
+class HardwareSet(TestSet):
+
+    @test(
+        name="Are there at least 2 CPU cores?",
+        description="Checks how many cores the processor has through nproc.")
+    def at_least_two_cores(self) -> TestResult:
+        nproc = os.popen("nproc")
+        cores = nproc.read()
+        if not nproc.close() is None:
+            return TestSet.TEST_INCONCLUSIVE
+        cores = int(cores.rstrip())
+        additional_info = {
+            'cores': cores
+        }
+        result = TestSet.TEST_FAILED if cores < 2 else TestSet.TEST_PASSED
+        return result, additional_info
