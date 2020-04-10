@@ -84,3 +84,28 @@ class QPython3EmulatorSet(TestSet):
         if address:
             return TestSet.TEST_PASSED
         return TestSet.TEST_FAILED
+
+
+class QPython3HumanUseSet(TestSet):
+
+    def __init__(self):
+        # It can break the command and control server if the import is not here
+        from androidhelper import Android
+        self.droid = Android()
+
+    @test(
+        name="Is WhatsApp installed?",
+        description="Verifies that WhatsApp is a launchable application.")
+    def whatsapp_installed(self) -> TestResult:
+        apps = self.droid.getLaunchableApplications()
+        if apps.get('WhatsApp'):
+            return TestSet.TEST_PASSED
+        return TestSet.TEST_FAILED
+
+    @test(
+        name="Does the clipboard have content?",
+        description="Checks wheter the clipboard is empty or not.")
+    def clipboard_has_content(self) -> TestResult:
+        if self.droid.getClipboard().result:
+            return TestSet.TEST_PASSED
+        return TestSet.TEST_FAILED
