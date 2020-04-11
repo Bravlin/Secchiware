@@ -6,3 +6,4 @@ c2/test_sets
 node/test_sets
 common/*egg-info
 __pycache__
+bin
