@@ -53,10 +53,8 @@ class AgnosticAntiAnalysisSet(TestSet):
     @test(
         name="Does execution time vary greatly?",
         description=
-            "Calculates 50 times the digest of a certain long phrase. If any "\
-            "measured value is out of the bounds established by adding or "\
-            "substracting three times the standard deviation to the mean, "\
-            "then the test fails.")
+            "Calculates 100 times the digest of a certain long phrase. If the "\
+            "coefficient of variation exceeds 0.8, the the test fails.")
     def timing_test(self) -> TestResult:
         phrase = b"Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed "\
             b"do eiusmod tempor incididunt ut labore et dolore magna aliqua. "\
@@ -67,24 +65,19 @@ class AgnosticAntiAnalysisSet(TestSet):
             b"proident, sunt in culpa qui officia deserunt mollit anim id est "\
             b"laborum."
         execution_times = []
-        for _ in range(50):
-            start_time = time.time()
+        for _ in range(100):
+            start_time = time.process_time()
             sha256(phrase).hexdigest()
-            end_time = time.time()
+            end_time = time.process_time()
             execution_times.append(end_time - start_time)
         mean = statistics.mean(execution_times)
-        sigma = statistics.stdev(execution_times)
+        sigma = statistics.stdev(execution_times, mean)
+        cv = sigma / mean
         additional_info = {
             'mean': mean,
-            'standard_deviation': sigma
+            'standard_deviation': sigma,
+            'coefficient_of_variation': cv
+
         }
-        max_tolerable = mean + 3. * sigma
-        min_tolerable = mean - 3. * sigma
-        out_of_bounds = [x for x in execution_times\
-            if x > max_tolerable and x < min_tolerable]
-        if out_of_bounds:
-            additional_info['out_of_bounds_measurements'] = out_of_bounds
-            result = TestSet.TEST_FAILED
-        else:
-            result = TestSet.TEST_PASSED
+        result = TestSet.TEST_FAILED if cv > 0.8 else TestSet.TEST_PASSED
         return result, additional_info
