@@ -1,5 +1,6 @@
 #include <unistd.h>
 #include <string.h>
+#include <math.h>
 #include <windows.h>
 
 #define TEST_PASSED 1
@@ -78,6 +79,26 @@ int WindowsAPI_WordWheelQueryHasContent()
     if (status != ERROR_SUCCESS)
         return TEST_INCONCLUSIVE;
     if (numValues < 2)
+        return TEST_FAILED;
+    return TEST_PASSED;
+}
+
+int WindowsAPI_HumanLikeCursorSpeed()
+{
+    int i;
+    double avg;
+    POINT points[10];
+    GetCursorPos(&points[0]);
+    for (i = 1; i < 10; i++)
+    {
+        sleep(1);
+        GetCursorPos(&points[i]);
+    }
+    avg = 0.;
+    for (i = 0; i < 9; i++)
+        avg += sqrt(pow((double) (points[i+1].x - points[i].x), 2.) + pow((double) (points[i+1].y - points[i].y), 2.));
+    avg /= 9.;
+    if (avg > 200.)
         return TEST_FAILED;
     return TEST_PASSED;
 }

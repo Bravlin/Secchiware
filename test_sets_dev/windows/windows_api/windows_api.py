@@ -55,3 +55,13 @@ class WindowsAPIHumanUseSet(TestSet):
             "has at least two entries.")
     def windows_api_wordwheelquery_has_content(self) -> TestResult:
         return getWindowsAPIDLL().WindowsAPI_WordWheelQueryHasContent()
+
+    @test(
+        name="Does the cursor speed correspond to a human?",
+        description=
+            "Takes 10 samples of the cursor position over 10 seconds and "\
+            "calculates the average speed from one point to the next. The "\
+            "speed corresponds to a human working if it is under 200 pixels "\
+            "per second.")
+    def windows_api_human_like_cursor_speed(self) -> TestResult:
+        return getWindowsAPIDLL().WindowsAPI_HumanLikeCursorSpeed()
