@@ -4,13 +4,14 @@ import os
 import requests as rq
 import signatures
 import shutil
+import sqlite3
 import tempfile
 import test_utils
 
 from base64 import b64encode
 from custom_collections import OrderedListOfDict
 from datetime import datetime
-from flask import abort, Flask, jsonify, request, Response
+from flask import abort, Flask, g, jsonify, request, Response
 from flask_cors import CORS
 from hashlib import sha256
 
@@ -20,7 +21,6 @@ def client_key_recoverer(key_id):
 
 def node_key_recoverer(key_id):
     return config['NODE_SECRET'] if key_id == "Node" else None
-
 
 def check_registered(ip, port):
     """Verifies if the given ip and port correspond to an active environment.
@@ -131,16 +131,51 @@ def add_environment():
     check_digest_header()
     check_authorization_header(node_key_recoverer, "Digest")
     check_is_json()
-    if not ('ip' in request.json and 'port' in request.json):
+    if not ('ip' in request.json
+            and 'port' in request.json
+            and 'platform_info' in request.json):
         abort(400, description="One or more keys missing in request's body")
 
     ip = request.json['ip']
     port = request.json['port']
+    platform_info = request.json['platform_info']
+
+    to_insert = (
+            ip,
+            int(port),
+            platform_info['platform'],
+            platform_info['node'],
+            platform_info['os']['system'],
+            platform_info['os']['release'],
+            platform_info['os']['version'],
+            platform_info['hardware']['machine'],
+            platform_info['hardware']['processor'],
+            platform_info['python']['build'][0],
+            platform_info['python']['build'][1],
+            platform_info['python']['compiler'],
+            platform_info['python']['implementation'],
+            platform_info['python']['version']
+    )
+    db = get_database()
+    cursor = db.execute(
+        "INSERT INTO session "\
+        "(env_ip, env_port, env_platform, env_node, env_os_system, "\
+        "env_os_release, env_os_version, env_hw_machine, "\
+        "env_hw_processor, env_py_build_no, env_py_build_date, "\
+        "env_py_compiler, env_py_implementation, env_py_version) "\
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        to_insert)
+    
+    db.commit()
 
     if not ip in environments:
         environments[ip] = {}
     environments[ip][port] = {
-        'session_start': datetime.utcnow().isoformat("T") + "Z"
+        'session_id': cursor.lastrowid,
+        'session_start': cursor.execute(
+            "SELECT strftime('%Y-%m-%dT%H:%M:%SZ', session_start, 'unixepoch') "\
+            "FROM session WHERE id_session = ?",
+            (cursor.lastrowid,)).fetchone()[0]
     }
 
     return Response(status=204, mimetype="application/json")
@@ -330,8 +365,55 @@ def delete_package(package):
     return Response(status=204, mimetype="application/json")
 
 
+def init_database():
+    db = sqlite3.connect(DATABASE_PATH)
+    cursor = db.cursor()
+    cursor.execute(
+        "CREATE TABLE IF NOT EXISTS session ("\
+        "id_session INTEGER PRIMARY KEY,"\
+        "session_start INTEGER NOT NULL DEFAULT (CAST(strftime('%s', 'now') AS INTEGER)),"\
+        "session_end INTEGER,"\
+        "env_ip TEXT NOT NULL,"\
+        "env_port INTEGER NOT NULL,"\
+        "env_platform TEXT NOT NULL,"\
+        "env_node TEXT NOT NULL,"\
+        "env_os_system TEXT NOT NULL,"\
+        "env_os_release TEXT NOT NULL,"\
+        "env_os_version TEXT NOT NULL,"\
+        "env_hw_machine TEXT NOT NULL,"\
+        "env_hw_processor TEXT NOT NULL,"\
+        "env_py_build_no TEXT NOT NULL,"\
+        "env_py_build_date TEXT NOT NULL,"\
+        "env_py_compiler TEXT NOT NULL,"\
+        "env_py_implementation TEXT NOT NULL,"\
+        "env_py_version TEXT NOT NULL)")
+    cursor.execute(
+        "CREATE TABLE IF NOT EXISTS execution ("\
+        "id_execution INTEGER PRIMARY KEY,"\
+        "fk_session INTEGER NOT NULL,"\
+        "timestamp_registered INTEGER DEFAULT (CAST(strftime('%s', 'now') AS INTEGER)),"\
+        "FOREIGN KEY (fk_session) REFERENCES session(id_session))")
+    cursor.execute(
+        "CREATE TABLE IF NOT EXISTS report ("\
+        "id_report INTEGER PRIMARY KEY,"\
+        "fk_execution INTEGER NOT NULL,"\
+        "timestamp_start REAL NOT NULL,"\
+        "timestamp_end REAL NOT NULL,"\
+        "result INTEGER NOT NULL,"
+        "additional_info TEXT,"\
+        "FOREIGN KEY (fk_execution) REFERENCES execution(id_execution))")
+    return db
+
+def get_database():
+    db = getattr(g, '_database', None)
+    if db is None:
+        db = g._database = init_database()
+    return db
+
+
 SCRIPT_PATH = os.path.dirname(os.path.abspath(__file__))
 TESTS_PATH = os.path.join(SCRIPT_PATH, "test_sets")
+DATABASE_PATH = os.path.join(SCRIPT_PATH, "secchiware.db")
 
 with open(os.path.join(SCRIPT_PATH, "config.json"), "r") as config_file:
     config = json.load(config_file)

@@ -7,3 +7,4 @@ node/test_sets
 common/*egg-info
 __pycache__
 bin
+secchiware.db

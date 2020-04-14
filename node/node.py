@@ -143,6 +143,7 @@ def execute_tests():
     
     return jsonify(tests.run_all_tests())
 
+
 def get_platform_info():
     os_info = {}
     os_info['system'] = platform.system()
@@ -174,7 +175,8 @@ def connect_to_c2():
         f"{config['C2_URL']}/environments",
         json={
             'ip': config['IP'],
-            'port': config['PORT']
+            'port': config['PORT'],
+            'platform_info': get_platform_info()
         }).prepare()
 
     digest = b64encode(sha256(prepared.body).digest()).decode()
@@ -216,6 +218,7 @@ def exit_gracefully(sig, frame):
         print(resp.json()['error'])
     finally:
         sys.exit()
+
 
 if __name__ == "__main__":
     SCRIPT_PATH = os.path.dirname(os.path.abspath(__file__))
