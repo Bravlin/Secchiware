@@ -23,7 +23,78 @@ servers:
 components:
   schemas:
     EnvironmentPlatformInformation:
-      $ref: 'common.yaml#/components/schemas/EnvironmentPlatformInformation'
+      type: object
+      properties:
+        platform:
+          type: string
+        node:
+          type: string
+        os:
+          type: object
+          properties:
+            system:
+              type: string
+            release:
+              type: string
+            version:
+              type: string
+          required:
+            - system
+            - release
+            - version
+        hardware:
+          type: object
+          properties:
+            machine:
+              type: string
+            processor:
+              type: string
+          required:
+            - machine
+            - processor
+        python:
+          type: object
+          properties:
+            build:
+              type: array
+              minLength: 2
+              maxLength: 2
+              items:
+                type: string
+            compiler:
+              type: string
+            implementation:
+              type: string
+            version:
+              type: string
+          required:
+            - buid
+            - compiler
+            - implementation
+            - version
+      required:
+        - platform
+        - node
+        - os
+        - hardware
+        - python
+      example:
+        platform: Linux-3.13.0-55-generic-x86_64-with-Ubuntu-14.04-trusty
+        node: MyMachine
+        os:
+          system: Linux
+          release: 3.13.0-55-generic
+          version: '#94-Ubuntu SMP Thu Jun 18 00:27:10 UTC 2015'
+        hardware:
+          machine: x86_64
+          processor: x86_64
+        python:
+          build:
+            - default
+            - Nov  7 2018 10:44:02
+          compiler: GCC 8.3.0
+          implementation: CPython
+          version: 3.6.9
     HTTPError:
       $ref: 'common.yaml#/components/schemas/HTTPError'
     TestsPackageInfo:
@@ -169,18 +240,23 @@ paths:
                   additionalProperties:
                     type: object
                     properties:
+                      session_id:
+                        type: integer
                       session_start:
                         type: string
                         format: date-time
                     required:
+                      - session_id
                       - session_start
               example:
                 192.168.0.14:
                     5100:
-                      session_start: 2020-04-02T23:58:44.115677Z
+                      session_id: 1
+                      session_start: 2020-04-02T23:58:44Z
                 192.168.0.19:
                     4900:
-                      session_start: 2020-04-03T00:02:06.121104Z
+                      session_id: 2
+                      session_start: 2020-04-03T00:02:06Z
     post:
       summary: Endpoint that allows a node to register itself.
       parameters:
@@ -207,9 +283,12 @@ paths:
                 port:
                   type: string
                   example: 5100
+                platform_info:
+                  $ref: '#components/schemas/EnvironmentPlatformInformation'
               required:
                 - ip
                 - port
+                - platform_info
       responses:
         '204':
           description: Environment registered successfully

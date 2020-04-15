@@ -25,7 +25,8 @@ def node_key_recoverer(key_id):
 def check_registered(ip, port):
     """Verifies if the given ip and port correspond to an active environment.
 
-    If there is no match, it aborts the current request handler.
+    If there is no match, it aborts the current request handler with status
+    code 404.
 
     Parameters
     ----------
@@ -42,7 +43,8 @@ def check_registered(ip, port):
 def check_is_json():
     """Verifies that the current request's MIME type is 'application/json'.
 
-    If that's not the case, it aborts the current request handler.
+    If that's not the case, it aborts the current request handler with status
+    code 415.
     """
 
     if not request.is_json:
@@ -141,31 +143,31 @@ def add_environment():
     platform_info = request.json['platform_info']
 
     to_insert = (
-            ip,
-            int(port),
-            platform_info['platform'],
-            platform_info['node'],
-            platform_info['os']['system'],
-            platform_info['os']['release'],
-            platform_info['os']['version'],
-            platform_info['hardware']['machine'],
-            platform_info['hardware']['processor'],
-            platform_info['python']['build'][0],
-            platform_info['python']['build'][1],
-            platform_info['python']['compiler'],
-            platform_info['python']['implementation'],
-            platform_info['python']['version']
+        ip,
+        int(port),
+        platform_info['platform'],
+        platform_info['node'],
+        platform_info['os']['system'],
+        platform_info['os']['release'],
+        platform_info['os']['version'],
+        platform_info['hardware']['machine'],
+        platform_info['hardware']['processor'],
+        platform_info['python']['build'][0],
+        platform_info['python']['build'][1],
+        platform_info['python']['compiler'],
+        platform_info['python']['implementation'],
+        platform_info['python']['version']
     )
+
     db = get_database()
     cursor = db.execute(
-        "INSERT INTO session "\
-        "(env_ip, env_port, env_platform, env_node, env_os_system, "\
-        "env_os_release, env_os_version, env_hw_machine, "\
-        "env_hw_processor, env_py_build_no, env_py_build_date, "\
-        "env_py_compiler, env_py_implementation, env_py_version) "\
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        """INSERT INTO session
+        (env_ip, env_port, env_platform, env_node, env_os_system,
+        env_os_release, env_os_version, env_hw_machine,
+        env_hw_processor, env_py_build_no, env_py_build_date,
+        env_py_compiler, env_py_implementation, env_py_version)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         to_insert)
-    
     db.commit()
 
     if not ip in environments:
@@ -173,8 +175,9 @@ def add_environment():
     environments[ip][port] = {
         'session_id': cursor.lastrowid,
         'session_start': cursor.execute(
-            "SELECT strftime('%Y-%m-%dT%H:%M:%SZ', session_start, 'unixepoch') "\
-            "FROM session WHERE id_session = ?",
+            """SELECT strftime('%Y-%m-%dT%H:%M:%SZ', session_start, 'unixepoch')
+            FROM session
+            WHERE id_session = ?""",
             (cursor.lastrowid,)).fetchone()[0]
     }
 
@@ -186,6 +189,14 @@ def remove_environment(ip, port):
 
     check_authorization_header(node_key_recoverer)
     check_registered(ip, port)
+
+    db = get_database()
+    db.execute(
+        """UPDATE session
+        SET session_end = strftime('%s', 'now')
+        WHERE id_session = ?""",
+        (environments[ip][port]['session_id'],))
+    db.commit()
     
     del environments[ip][port]
     if not environments[ip]:
@@ -196,16 +207,38 @@ def remove_environment(ip, port):
 @app.route("/environments/<ip>/<port>/info", methods=["GET"])
 def get_environment_info(ip, port):
     check_registered(ip, port)
-    
-    try:
-        resp = rq.get(f"http://{ip}:{port}/info")
-    except rq.exceptions.ConnectionError:
-        abort(504,
-            description="The requested environment could not be reached")
 
-    if resp.status_code == 200:
-        return jsonify(resp.json())
-    abort(502, description=f"Unexpected response from node at {ip}:{port}")
+    db = get_database()
+    row = db.execute(
+        """SELECT env_platform, env_node, env_os_system, env_os_release,
+        env_os_version, env_hw_machine, env_hw_processor, env_py_build_no,
+        env_py_build_date, env_py_compiler, env_py_implementation,
+        env_py_version
+        FROM session
+        WHERE id_session = ?""",
+        (environments[ip][port]['session_id'],)).fetchone()
+
+    info = {
+        'platform': row['env_platform'],
+        'node': row['env_node'],
+        'os': {
+            'system': row['env_os_system'],
+            'release': row['env_os_release'],
+            'version': row['env_os_version']
+        },
+        'hardware': {
+            'machine': row['env_hw_machine'],
+            'processor': row['env_hw_processor']
+        },
+        'python': {
+            'build': (row['env_py_build_no'], row['env_py_build_date']),
+            'compiler': row['env_py_compiler'],
+            'implementation': row['env_py_implementation'],
+            'version': row['env_py_version']
+        }
+    }
+
+    return jsonify(info)
     
 @app.route("/environments/<ip>/<port>/installed", methods=["GET"])
 def list_installed_test_sets(ip, port):
@@ -309,13 +342,37 @@ def execute_tests(ip, port):
     except rq.exceptions.ConnectionError:
         abort(504,
             description="The requested environment could not be reached")
-
-    if resp.status_code == 200:
-        return jsonify(resp.json())
+        
     if resp.status_code == 400:
         abort(500,
             description="Something went wrong when handling the request")
-    abort(502, description=f"Unexpected response from node at {ip}:{port}")
+    if resp.status_code != 200:
+        abort(502, description=f"Unexpected response from node at {ip}:{port}")
+
+    db = get_database()
+    cursor = db.execute(
+        "INSERT INTO execution (fk_session) VALUES (?)",
+        (environments[ip][port]['session_id'],))
+    execution_id = cursor.lastrowid
+    to_insert = []
+    for report in resp.json():
+        additional_info = report.get('additional_info')
+        if additional_info:
+            additional_info = json.dumps(additional_info)
+        to_insert.append((
+            execution_id,
+            report['timestamp_start'],
+            report['timestamp_end'],
+            report['result_code'],
+            additional_info))
+    cursor.executemany(
+        """INSERT INTO report (fk_execution, timestamp_start, timestamp_end,
+        result_code, additional_info)
+        VALUES (?, ?, ?, ?, ?)""",
+        to_insert)
+    db.commit()
+
+    return jsonify(resp.json())
 
 @app.route("/test_sets", methods=["GET"])
 def list_available_test_sets():
@@ -365,46 +422,47 @@ def delete_package(package):
     return Response(status=204, mimetype="application/json")
 
 
-def init_database():
+def init_database() -> sqlite3.Connection:
     db = sqlite3.connect(DATABASE_PATH)
+    db.row_factory = sqlite3.Row
     cursor = db.cursor()
     cursor.execute(
-        "CREATE TABLE IF NOT EXISTS session ("\
-        "id_session INTEGER PRIMARY KEY,"\
-        "session_start INTEGER NOT NULL DEFAULT (CAST(strftime('%s', 'now') AS INTEGER)),"\
-        "session_end INTEGER,"\
-        "env_ip TEXT NOT NULL,"\
-        "env_port INTEGER NOT NULL,"\
-        "env_platform TEXT NOT NULL,"\
-        "env_node TEXT NOT NULL,"\
-        "env_os_system TEXT NOT NULL,"\
-        "env_os_release TEXT NOT NULL,"\
-        "env_os_version TEXT NOT NULL,"\
-        "env_hw_machine TEXT NOT NULL,"\
-        "env_hw_processor TEXT NOT NULL,"\
-        "env_py_build_no TEXT NOT NULL,"\
-        "env_py_build_date TEXT NOT NULL,"\
-        "env_py_compiler TEXT NOT NULL,"\
-        "env_py_implementation TEXT NOT NULL,"\
-        "env_py_version TEXT NOT NULL)")
+        """CREATE TABLE IF NOT EXISTS session
+        (id_session INTEGER PRIMARY KEY,
+        session_start INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+        session_end INTEGER,
+        env_ip TEXT NOT NULL,
+        env_port INTEGER NOT NULL,
+        env_platform TEXT NOT NULL,
+        env_node TEXT NOT NULL,
+        env_os_system TEXT NOT NULL,
+        env_os_release TEXT NOT NULL,
+        env_os_version TEXT NOT NULL,
+        env_hw_machine TEXT NOT NULL,
+        env_hw_processor TEXT NOT NULL,
+        env_py_build_no TEXT NOT NULL,
+        env_py_build_date TEXT NOT NULL,
+        env_py_compiler TEXT NOT NULL,
+        env_py_implementation TEXT NOT NULL,
+        env_py_version TEXT NOT NULL)""")
     cursor.execute(
-        "CREATE TABLE IF NOT EXISTS execution ("\
-        "id_execution INTEGER PRIMARY KEY,"\
-        "fk_session INTEGER NOT NULL,"\
-        "timestamp_registered INTEGER DEFAULT (CAST(strftime('%s', 'now') AS INTEGER)),"\
-        "FOREIGN KEY (fk_session) REFERENCES session(id_session))")
+        """CREATE TABLE IF NOT EXISTS execution
+        (id_execution INTEGER PRIMARY KEY,
+        fk_session INTEGER NOT NULL,
+        timestamp_registered INTEGER DEFAULT (strftime('%s', 'now')),
+        FOREIGN KEY (fk_session) REFERENCES session(id_session))""")
     cursor.execute(
-        "CREATE TABLE IF NOT EXISTS report ("\
-        "id_report INTEGER PRIMARY KEY,"\
-        "fk_execution INTEGER NOT NULL,"\
-        "timestamp_start REAL NOT NULL,"\
-        "timestamp_end REAL NOT NULL,"\
-        "result INTEGER NOT NULL,"
-        "additional_info TEXT,"\
-        "FOREIGN KEY (fk_execution) REFERENCES execution(id_execution))")
+        """CREATE TABLE IF NOT EXISTS report
+        (id_report INTEGER PRIMARY KEY,
+        fk_execution INTEGER NOT NULL,
+        timestamp_start TEXT NOT NULL,
+        timestamp_end TEXT NOT NULL,
+        result_code INTEGER NOT NULL,
+        additional_info TEXT,
+        FOREIGN KEY (fk_execution) REFERENCES execution(id_execution))""")
     return db
 
-def get_database():
+def get_database() -> sqlite3.Connection:
     db = getattr(g, '_database', None)
     if db is None:
         db = g._database = init_database()

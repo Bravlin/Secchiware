@@ -15,7 +15,7 @@ from flask import abort, Flask, jsonify, request, Response
 from hashlib import sha256
 
 
-def check_authorization_header(*mandatory_headers):
+def check_authorization_header(*mandatory_headers) -> None:
     if not 'Authorization' in request.headers:
         abort(401, description="No 'Authorization' header found in request.")
     try:
@@ -57,9 +57,6 @@ def not_found(e):
 def unsupported_media_type(e):
     return jsonify(error=str(e)), 415
 
-@app.route("/info", methods=["GET"])
-def recover_platform_info():
-    return jsonify(get_platform_info())
 
 @app.route("/test_sets", methods=["GET"])
 def list_installed_test_sets():
@@ -144,7 +141,7 @@ def execute_tests():
     return jsonify(tests.run_all_tests())
 
 
-def get_platform_info():
+def get_platform_info() -> dict:
     os_info = {}
     os_info['system'] = platform.system()
     os_info['release'] = platform.release()
