@@ -54,7 +54,7 @@ class AgnosticAntiAnalysisSet(TestSet):
         name="Does execution time vary greatly?",
         description=
             "Calculates 100 times the digest of a certain long phrase. If the "\
-            "coefficient of variation exceeds 0.8, the the test fails.")
+            "coefficient of variation exceeds 0.8, then the test fails.")
     def timing_test(self) -> TestResult:
         phrase = b"Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed "\
             b"do eiusmod tempor incididunt ut labore et dolore magna aliqua. "\

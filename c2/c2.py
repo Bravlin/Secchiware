@@ -10,7 +10,6 @@ import test_utils
 
 from base64 import b64encode
 from custom_collections import OrderedListOfDict
-from datetime import datetime
 from flask import abort, Flask, g, jsonify, request, Response
 from flask_cors import CORS
 from hashlib import sha256
@@ -175,7 +174,7 @@ def add_environment():
     environments[ip][port] = {
         'session_id': cursor.lastrowid,
         'session_start': cursor.execute(
-            """SELECT strftime('%Y-%m-%dT%H:%M:%SZ', session_start, 'unixepoch')
+            """SELECT session_start
             FROM session
             WHERE id_session = ?""",
             (cursor.lastrowid,)).fetchone()[0]
@@ -193,7 +192,7 @@ def remove_environment(ip, port):
     db = get_database()
     db.execute(
         """UPDATE session
-        SET session_end = strftime('%s', 'now')
+        SET session_end = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
         WHERE id_session = ?""",
         (environments[ip][port]['session_id'],))
     db.commit()
@@ -361,14 +360,16 @@ def execute_tests(ip, port):
             additional_info = json.dumps(additional_info)
         to_insert.append((
             execution_id,
+            report['test_name'],
+            report['test_description'],
             report['timestamp_start'],
             report['timestamp_end'],
             report['result_code'],
             additional_info))
     cursor.executemany(
-        """INSERT INTO report (fk_execution, timestamp_start, timestamp_end,
-        result_code, additional_info)
-        VALUES (?, ?, ?, ?, ?)""",
+        """INSERT INTO report (fk_execution, test_name, test_description,
+        timestamp_start, timestamp_end, result_code, additional_info)
+        VALUES (?, ?, ?, ?, ?, ?, ?)""",
         to_insert)
     db.commit()
 
@@ -421,6 +422,65 @@ def delete_package(package):
     available.delete(package)
     return Response(status=204, mimetype="application/json")
 
+@app.route("/sessions", methods=["GET"])
+def search_sessions():
+    db = get_database()
+    
+    if not request.args:
+        cursor = db.execute(
+            """SELECT id_session, session_start, session_end, env_ip, env_port,
+            env_os_system
+            FROM session""")
+    else:
+        try:
+            cursor = api_parametrized_search(
+                db=db,
+                table="session",
+                order_by_api_to_db={
+                    'id': "id_session",
+                    'start': "session_start",
+                    'end': "session_end",
+                    'ip': "env_ip",
+                    'port': "env_port",
+                    'system': "env_os_system"
+                },
+                where_api_to_db={
+                    'ids': ("id_session", "="),
+                    'start_from': ("session_start", ">="),
+                    'start_to': ("session_start", "<="),
+                    'end_from': ("session_end", ">="),
+                    'end_to': ("session_end", "<="),
+                    'ips': ("env_ip", "="),
+                    'ports': ("env_ports", "="),
+                    'systems': ("env_os_system", "="),
+                },
+                parameters=request.args,
+                select_columns=(
+                    "id_session",
+                    "session_start",
+                    "session_end",
+                    "env_ip",
+                    "env_port",
+                    "env_os_system"
+                ))
+        except ValueError as e:
+            abort(400, str(e))
+
+    results = []
+    row = cursor.fetchone()
+    while row:
+        results.append({
+            'session_id': row['id_session'],
+            'session_start': row['session_start'],
+            'session_end': row['session_end'],
+            'ip': row['env_ip'],
+            'port': row['env_port'],
+            'platform_os_system': row['env_os_system']
+        })
+        row = cursor.fetchone()
+
+    return jsonify(results)
+
 
 def init_database() -> sqlite3.Connection:
     db = sqlite3.connect(DATABASE_PATH)
@@ -429,7 +489,7 @@ def init_database() -> sqlite3.Connection:
     cursor.execute(
         """CREATE TABLE IF NOT EXISTS session
         (id_session INTEGER PRIMARY KEY,
-        session_start INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+        session_start TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
         session_end INTEGER,
         env_ip TEXT NOT NULL,
         env_port INTEGER NOT NULL,
@@ -449,12 +509,14 @@ def init_database() -> sqlite3.Connection:
         """CREATE TABLE IF NOT EXISTS execution
         (id_execution INTEGER PRIMARY KEY,
         fk_session INTEGER NOT NULL,
-        timestamp_registered INTEGER DEFAULT (strftime('%s', 'now')),
+        timestamp_registered INTEGER DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
         FOREIGN KEY (fk_session) REFERENCES session(id_session))""")
     cursor.execute(
         """CREATE TABLE IF NOT EXISTS report
         (id_report INTEGER PRIMARY KEY,
         fk_execution INTEGER NOT NULL,
+        test_name TEXT NOT NULL,
+        test_description TEXT NOT NULL,
         timestamp_start TEXT NOT NULL,
         timestamp_end TEXT NOT NULL,
         result_code INTEGER NOT NULL,
@@ -467,6 +529,67 @@ def get_database() -> sqlite3.Connection:
     if db is None:
         db = g._database = init_database()
     return db
+
+def api_parametrized_search(
+        db: sqlite3.Connection,
+        table: str,
+        order_by_api_to_db: dict,
+        where_api_to_db: dict,
+        parameters: dict,
+        select_columns: tuple = None) -> sqlite3.Cursor:
+    if not select_columns:
+        query = f"SELECT * FROM {table}"
+    else:
+        query = f"SELECT {', '.join(select_columns)} FROM {table}"
+
+    param_keys = {*parameters.keys()}
+    if not 'order_by' in param_keys:
+        if 'arrange' in param_keys:
+            raise ValueError("arrange key present when no order is specified")
+        order_by_clause = ""
+    else:
+        if not parameters['order_by'] in order_by_api_to_db:
+            raise ValueError("Invalid order key")
+        order_by_clause =\
+            f"ORDER BY {order_by_api_to_db[parameters['order_by']]}"
+        param_keys.remove('order_by')
+
+        if 'arrange' in param_keys:
+            if parameters['arrange'] not in {'asc', 'desc'}:
+                raise ValueError("Invalid arrange value")
+            order_by_clause = f"{order_by_clause} {parameters['arrange']}"
+            param_keys.remove('arrange')
+    
+    if not 'limit' in param_keys:
+        limit_clause = ""
+    else:
+        if int(parameters['limit']) <= 0:
+            raise ValueError("Invalid limit value")
+        limit_clause = f"LIMIT {parameters['limit']}"
+        param_keys.remove('limit')
+
+    where_clause = ""
+    placeholders_values = {}
+    for key in param_keys:
+        if key not in where_api_to_db:
+            raise ValueError("Invalid query parameter found")
+        where_filter = ""
+        column = where_api_to_db[key][0]
+        operator = where_api_to_db[key][1]
+        i = 0
+        for value in parameters[key].split(","):
+            placeholder_key = f"{key}{i}"
+            placeholders_values[placeholder_key] = value
+            where_filter =\
+                f"{where_filter} OR {column}{operator}:{placeholder_key}"
+            i += 1
+
+        where_filter = where_filter.replace(" OR ", "", 1)
+        where_clause = f"{where_clause} AND ({where_filter})"
+    where_clause = where_clause.replace(" AND", "WHERE", 1)
+
+    query = f"{query} {where_clause} {order_by_clause} {limit_clause}"
+    return db.execute(query, placeholders_values)
 
 
 SCRIPT_PATH = os.path.dirname(os.path.abspath(__file__))

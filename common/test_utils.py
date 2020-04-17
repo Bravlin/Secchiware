@@ -56,9 +56,11 @@ def test(name: str, description: str) -> Callable:
         @wraps(method)
         def wrapper(self: TestSet) -> Callable:
             report = {}
-            report['timestamp_start'] = datetime.utcnow().isoformat("T") + "Z"
+            report['timestamp_start'] =\
+                datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S.%fZ')
             result = method(self)
-            report['timestamp_end'] = datetime.utcnow().isoformat("T") + "Z"
+            report['timestamp_end'] =\
+                datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S.%fZ')
 
             if isinstance(result, int):
                 report['result_code'] = result
