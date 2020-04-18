@@ -481,6 +481,75 @@ def search_sessions():
 
     return jsonify(results)
 
+@app.route("/sessions/<session_id>", methods=["GET"])
+def get_session(session_id):
+    row = get_database().execute(
+        """SELECT s.id_session, s.session_start, s.session_end, s.env_ip,
+        s.env_port, s.env_platform, s.env_node, s.env_os_system,
+        s.env_os_release, s.env_os_version, s.env_hw_machine,
+        s.env_hw_processor, s.env_py_build_no, s.env_py_build_date,
+        s.env_py_compiler, s.env_py_implementation, s.env_py_version,
+        (
+            SELECT COUNT(id_execution)
+            FROM execution
+            WHERE fk_session = s.id_session
+        ) AS total_executions
+        FROM session s
+        WHERE s.id_session = ?""", (session_id,)).fetchone()
+
+    if not row:
+        abort(404, "No session found with given id")
+
+    result = {
+        'session_id': row['id_session'],
+        'session_start': row['session_start'],
+        'session_end': row['session_end'],
+        'ip': row['env_ip'],
+        'port': row['env_port'],
+        'platform_info': {
+            'platform': row['env_platform'],
+            'node': row['env_node'],
+            'os': {
+                'system': row['env_os_system'],
+                'release': row['env_os_release'],
+                'version': row['env_os_version']
+            },
+            'hardware': {
+                'machine': row['env_hw_machine'],
+                'processor': row['env_hw_processor']
+            },
+            'python': {
+                'build': (row['env_py_build_no'], row['env_py_build_date']),
+                'compiler': row['env_py_compiler'],
+                'implementation': row['env_py_implementation'],
+                'version': row['env_py_version']
+            }
+        },
+        'total_executions': row['total_executions']
+    }
+
+    return jsonify(result)
+
+@app.route("/sessions/<session_id>", methods=["DELETE"])
+def delete_session(session_id):
+    check_authorization_header(client_key_recoverer)
+
+    db = get_database()
+    cursor = db.execute(
+        "SELECT session_end FROM session WHERE id_session = ?",
+        (session_id,))
+    row = cursor.fetchone()
+
+    if not row:
+        abort(404, "No session found with given id")
+    if not row[0]:
+        abort(400, "Session is still active")
+
+    cursor.execute("DELETE FROM session WHERE id_session = ?", (session_id,))
+    db.commit()
+
+    return Response(status=204, mimetype="application/json")
+
 
 def init_database() -> sqlite3.Connection:
     db = sqlite3.connect(DATABASE_PATH)
@@ -510,7 +579,10 @@ def init_database() -> sqlite3.Connection:
         (id_execution INTEGER PRIMARY KEY,
         fk_session INTEGER NOT NULL,
         timestamp_registered INTEGER DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
-        FOREIGN KEY (fk_session) REFERENCES session(id_session))""")
+        CONSTRAINT execution_session
+            FOREIGN KEY (fk_session)
+            REFERENCES session(id_session)
+            ON DELETE CASCADE)""")
     cursor.execute(
         """CREATE TABLE IF NOT EXISTS report
         (id_report INTEGER PRIMARY KEY,
@@ -521,7 +593,11 @@ def init_database() -> sqlite3.Connection:
         timestamp_end TEXT NOT NULL,
         result_code INTEGER NOT NULL,
         additional_info TEXT,
-        FOREIGN KEY (fk_execution) REFERENCES execution(id_execution))""")
+        CONSTRAINT report_execution
+            FOREIGN KEY (fk_execution)
+            REFERENCES execution(id_execution)
+            ON DELETE CASCADE)""")
+    cursor.execute("PRAGMA foreign_keys = ON")
     return db
 
 def get_database() -> sqlite3.Connection:

@@ -104,6 +104,31 @@ def lsenv():
             for port, content in ports.items():
                 print(f"{ip}:{port} {content['session_start']}")
 
+@main.command("session_delete")
+@click.option('--password', prompt=True, hide_input=True)
+@click.argument("sessions", nargs=-1)
+def delete_sessions(password, sessions):
+    key = password.encode()
+    for session in sessions:
+        signature = signatures.new_signature(
+            key,
+            "DELETE",
+            f"/sessions/{session}")
+        auth_content = signatures.new_authorization_header(
+            "Client",
+            signature)
+        try:
+            resp = requests.delete(
+                f"{C2_URL}/sessions/{session}",
+                headers={'Authorization': auth_content})
+        except requests.exceptions.ConnectionError:
+            print("Connection refused.")
+        else:
+            if resp.status_code in {400, 401, 404}:
+                print(resp.json()['error'])
+            elif resp.status_code != 204:
+                print("Unexpected response from Command and Control Sever.")
+
 @main.command("info")
 @click.argument("ip")
 @click.argument("port")
