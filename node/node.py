@@ -8,8 +8,10 @@ import signatures
 import shutil
 import sys
 import test_utils
+import time
 
 from base64 import b64encode
+from concurrent.futures import ThreadPoolExecutor
 from custom_collections import OrderedListOfDict
 from flask import abort, Flask, jsonify, request, Response
 from hashlib import sha256
@@ -57,6 +59,19 @@ def not_found(e):
 def unsupported_media_type(e):
     return jsonify(error=str(e)), 415
 
+
+@app.route("/", methods=["DELETE"])
+def stop_node():
+    def exit_by_c2_petition():
+        time.sleep(1)
+        print("Exiting by C2 petition")
+        os._exit(0)
+
+    check_authorization_header()
+
+    ThreadPoolExecutor(max_workers=1).submit(exit_by_c2_petition)
+
+    return Response(status=204, mimetype="application/json")
 
 @app.route("/test_sets", methods=["GET"])
 def list_installed_test_sets():

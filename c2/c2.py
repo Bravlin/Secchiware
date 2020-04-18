@@ -4,7 +4,9 @@ import os
 import requests as rq
 import signatures
 import shutil
+import signal
 import sqlite3
+import sys
 import tempfile
 import test_utils
 
@@ -20,6 +22,125 @@ def client_key_recoverer(key_id):
 
 def node_key_recoverer(key_id):
     return config['NODE_SECRET'] if key_id == "Node" else None
+
+
+def init_database() -> sqlite3.Connection:
+    db = sqlite3.connect(DATABASE_PATH)
+    db.row_factory = sqlite3.Row
+    cursor = db.cursor()
+    cursor.execute(
+        """CREATE TABLE IF NOT EXISTS session
+        (id_session INTEGER PRIMARY KEY,
+        session_start TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+        session_end INTEGER,
+        env_ip TEXT NOT NULL,
+        env_port INTEGER NOT NULL,
+        env_platform TEXT NOT NULL,
+        env_node TEXT NOT NULL,
+        env_os_system TEXT NOT NULL,
+        env_os_release TEXT NOT NULL,
+        env_os_version TEXT NOT NULL,
+        env_hw_machine TEXT NOT NULL,
+        env_hw_processor TEXT NOT NULL,
+        env_py_build_no TEXT NOT NULL,
+        env_py_build_date TEXT NOT NULL,
+        env_py_compiler TEXT NOT NULL,
+        env_py_implementation TEXT NOT NULL,
+        env_py_version TEXT NOT NULL)""")
+    cursor.execute(
+        """CREATE TABLE IF NOT EXISTS execution
+        (id_execution INTEGER PRIMARY KEY,
+        fk_session INTEGER NOT NULL,
+        timestamp_registered INTEGER DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+        CONSTRAINT execution_session
+            FOREIGN KEY (fk_session)
+            REFERENCES session(id_session)
+            ON DELETE CASCADE)""")
+    cursor.execute(
+        """CREATE TABLE IF NOT EXISTS report
+        (id_report INTEGER PRIMARY KEY,
+        fk_execution INTEGER NOT NULL,
+        test_name TEXT NOT NULL,
+        test_description TEXT NOT NULL,
+        timestamp_start TEXT NOT NULL,
+        timestamp_end TEXT NOT NULL,
+        result_code INTEGER NOT NULL,
+        additional_info TEXT,
+        CONSTRAINT report_execution
+            FOREIGN KEY (fk_execution)
+            REFERENCES execution(id_execution)
+            ON DELETE CASCADE)""")
+    cursor.execute("PRAGMA foreign_keys = ON")
+    return db
+
+def api_parametrized_search(
+        db: sqlite3.Connection,
+        table: str,
+        order_by_api_to_db: dict,
+        where_api_to_db: dict,
+        parameters: dict,
+        select_columns: tuple = None) -> sqlite3.Cursor:
+    if not select_columns:
+        query = f"SELECT * FROM {table}"
+    else:
+        query = f"SELECT {', '.join(select_columns)} FROM {table}"
+
+    param_keys = {*parameters.keys()}
+    if not 'order_by' in param_keys:
+        if 'arrange' in param_keys:
+            raise ValueError("arrange key present when no order is specified")
+        order_by_clause = ""
+    else:
+        if not parameters['order_by'] in order_by_api_to_db:
+            raise ValueError("Invalid order key")
+        order_by_clause =\
+            f"ORDER BY {order_by_api_to_db[parameters['order_by']]}"
+        param_keys.remove('order_by')
+
+        if 'arrange' in param_keys:
+            if parameters['arrange'] not in {'asc', 'desc'}:
+                raise ValueError("Invalid arrange value")
+            order_by_clause = f"{order_by_clause} {parameters['arrange']}"
+            param_keys.remove('arrange')
+    
+    if not 'limit' in param_keys:
+        limit_clause = ""
+    else:
+        if int(parameters['limit']) <= 0:
+            raise ValueError("Invalid limit value")
+        limit_clause = f"LIMIT {parameters['limit']}"
+        param_keys.remove('limit')
+
+    where_clause = ""
+    placeholders_values = {}
+    for key in param_keys:
+        if key not in where_api_to_db:
+            raise ValueError("Invalid query parameter found")
+        where_filter = ""
+        column = where_api_to_db[key][0]
+        operator = where_api_to_db[key][1]
+        i = 0
+        for value in parameters[key].split(","):
+            placeholder_key = f"{key}{i}"
+            placeholders_values[placeholder_key] = value
+            where_filter =\
+                f"{where_filter} OR {column}{operator}:{placeholder_key}"
+            i += 1
+
+        where_filter = where_filter.replace(" OR ", "", 1)
+        where_clause = f"{where_clause} AND ({where_filter})"
+    where_clause = where_clause.replace(" AND", "WHERE", 1)
+
+    query = f"{query} {where_clause} {order_by_clause} {limit_clause}"
+    return db.execute(query, placeholders_values)
+
+
+def get_database() -> sqlite3.Connection:
+    db = getattr(g, '_database', None)
+    if db is None:
+        db = g._database = init_database()
+    return db
+
 
 def check_registered(ip, port):
     """Verifies if the given ip and port correspond to an active environment.
@@ -83,7 +204,9 @@ CORS(app, resources={
     r"/": {},
     r"/environments": {'methods': "GET"},
     r"/environments/[^/]+/[^/]+/+": {},
-    r"/test_sets/*": {}
+    r"/test_sets/*": {},
+    r"/sessions/*": {},
+    r"/executions/*": {}
 })
 
 
@@ -445,14 +568,14 @@ def search_sessions():
                     'system': "env_os_system"
                 },
                 where_api_to_db={
-                    'ids': ("id_session", "="),
+                    'id': ("id_session", "="),
                     'start_from': ("session_start", ">="),
                     'start_to': ("session_start", "<="),
                     'end_from': ("session_end", ">="),
                     'end_to': ("session_end", "<="),
-                    'ips': ("env_ip", "="),
-                    'ports': ("env_ports", "="),
-                    'systems': ("env_os_system", "="),
+                    'ip': ("env_ip", "="),
+                    'port': ("env_ports", "="),
+                    'system': ("env_os_system", "="),
                 },
                 parameters=request.args,
                 select_columns=(
@@ -550,122 +673,126 @@ def delete_session(session_id):
 
     return Response(status=204, mimetype="application/json")
 
+@app.route("/executions", methods=["GET"])
+def get_executions():
+    db = get_database()
 
-def init_database() -> sqlite3.Connection:
-    db = sqlite3.connect(DATABASE_PATH)
-    db.row_factory = sqlite3.Row
-    cursor = db.cursor()
-    cursor.execute(
-        """CREATE TABLE IF NOT EXISTS session
-        (id_session INTEGER PRIMARY KEY,
-        session_start TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
-        session_end INTEGER,
-        env_ip TEXT NOT NULL,
-        env_port INTEGER NOT NULL,
-        env_platform TEXT NOT NULL,
-        env_node TEXT NOT NULL,
-        env_os_system TEXT NOT NULL,
-        env_os_release TEXT NOT NULL,
-        env_os_version TEXT NOT NULL,
-        env_hw_machine TEXT NOT NULL,
-        env_hw_processor TEXT NOT NULL,
-        env_py_build_no TEXT NOT NULL,
-        env_py_build_date TEXT NOT NULL,
-        env_py_compiler TEXT NOT NULL,
-        env_py_implementation TEXT NOT NULL,
-        env_py_version TEXT NOT NULL)""")
-    cursor.execute(
-        """CREATE TABLE IF NOT EXISTS execution
-        (id_execution INTEGER PRIMARY KEY,
-        fk_session INTEGER NOT NULL,
-        timestamp_registered INTEGER DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
-        CONSTRAINT execution_session
-            FOREIGN KEY (fk_session)
-            REFERENCES session(id_session)
-            ON DELETE CASCADE)""")
-    cursor.execute(
-        """CREATE TABLE IF NOT EXISTS report
-        (id_report INTEGER PRIMARY KEY,
-        fk_execution INTEGER NOT NULL,
-        test_name TEXT NOT NULL,
-        test_description TEXT NOT NULL,
-        timestamp_start TEXT NOT NULL,
-        timestamp_end TEXT NOT NULL,
-        result_code INTEGER NOT NULL,
-        additional_info TEXT,
-        CONSTRAINT report_execution
-            FOREIGN KEY (fk_execution)
-            REFERENCES execution(id_execution)
-            ON DELETE CASCADE)""")
-    cursor.execute("PRAGMA foreign_keys = ON")
-    return db
-
-def get_database() -> sqlite3.Connection:
-    db = getattr(g, '_database', None)
-    if db is None:
-        db = g._database = init_database()
-    return db
-
-def api_parametrized_search(
-        db: sqlite3.Connection,
-        table: str,
-        order_by_api_to_db: dict,
-        where_api_to_db: dict,
-        parameters: dict,
-        select_columns: tuple = None) -> sqlite3.Cursor:
-    if not select_columns:
-        query = f"SELECT * FROM {table}"
+    if not request.args:
+        cursor = db.execute("SELECT * FROM execution")
     else:
-        query = f"SELECT {', '.join(select_columns)} FROM {table}"
-
-    param_keys = {*parameters.keys()}
-    if not 'order_by' in param_keys:
-        if 'arrange' in param_keys:
-            raise ValueError("arrange key present when no order is specified")
-        order_by_clause = ""
-    else:
-        if not parameters['order_by'] in order_by_api_to_db:
-            raise ValueError("Invalid order key")
-        order_by_clause =\
-            f"ORDER BY {order_by_api_to_db[parameters['order_by']]}"
-        param_keys.remove('order_by')
-
-        if 'arrange' in param_keys:
-            if parameters['arrange'] not in {'asc', 'desc'}:
-                raise ValueError("Invalid arrange value")
-            order_by_clause = f"{order_by_clause} {parameters['arrange']}"
-            param_keys.remove('arrange')
+        try:
+            cursor = api_parametrized_search(
+                db=db,
+                table="execution",
+                order_by_api_to_db={
+                    'id': "id_execution",
+                    'session': "fk_session",
+                    'registered': 'timestamp_registered',
+                },
+                where_api_to_db={
+                    'id': ("id_execution", "="),
+                    'session': ("fk_session", "="),
+                    'registered_from': ("timestamp_registered", ">="),
+                    'registered_to': ("timestamp_registered", "<="),
+                },
+                parameters=request.args,
+                select_columns=("*"))
+        except ValueError as e:
+            abort(400, str(e))
     
-    if not 'limit' in param_keys:
-        limit_clause = ""
-    else:
-        if int(parameters['limit']) <= 0:
-            raise ValueError("Invalid limit value")
-        limit_clause = f"LIMIT {parameters['limit']}"
-        param_keys.remove('limit')
+    results = []
+    execution = cursor.fetchone()
+    subcursor = db.cursor()
+    while execution:
+        reports = []
+        subcursor.execute(
+            """SELECT test_name, test_description, result_code,
+            additional_info, timestamp_start, timestamp_end
+            FROM report
+            WHERE fk_execution = ?
+            ORDER BY timestamp_start""",
+            (execution['id_execution'],))
+        report = subcursor.fetchone()
+        while report:
+            report_dict = {
+                'test_name': report['test_name'],
+                'test_description': report['test_description'],
+                'result_code': report['result_code'],
+                'timestamp_start': report['timestamp_start'],
+                'timestamp_end': report['timestamp_end'],
+            }
+            if report['additional_info']:
+                report_dict['additional_info'] =\
+                    json.loads(report['additional_info'])
+            reports.append(report_dict)
+            report = subcursor.fetchone()
+        
+        results.append({
+            'execution_id': execution['id_execution'],
+            'session_id': execution['fk_session'],
+            'timestamp_registered': execution['timestamp_registered'],
+            'reports': reports
+        })
 
-    where_clause = ""
-    placeholders_values = {}
-    for key in param_keys:
-        if key not in where_api_to_db:
-            raise ValueError("Invalid query parameter found")
-        where_filter = ""
-        column = where_api_to_db[key][0]
-        operator = where_api_to_db[key][1]
-        i = 0
-        for value in parameters[key].split(","):
-            placeholder_key = f"{key}{i}"
-            placeholders_values[placeholder_key] = value
-            where_filter =\
-                f"{where_filter} OR {column}{operator}:{placeholder_key}"
-            i += 1
+        execution = cursor.fetchone()
+    
+    return jsonify(results)
 
-        where_filter = where_filter.replace(" OR ", "", 1)
-        where_clause = f"{where_clause} AND ({where_filter})"
-    where_clause = where_clause.replace(" AND", "WHERE", 1)
+@app.route("/executions/<execution_id>", methods=["DELETE"])
+def delete_execution(execution_id):
+    check_authorization_header(client_key_recoverer)
 
-    query = f"{query} {where_clause} {order_by_clause} {limit_clause}"
-    return db.execute(query, placeholders_values)
+    db = get_database()
+    cursor = db.execute(
+        "DELETE FROM execution WHERE id_execution = ?", (execution_id,))
+    
+    if cursor.rowcount != 1:
+        abort(404, "No execution found with given id")
+
+    db.commit()
+
+    return Response(status=204, mimetype="application/json")
+
+
+def exit_gracefully(sig, frame):
+    print("Starting exit...")
+
+    if environments:
+        sessions = []
+
+        signature = signatures.new_signature(
+            config['NODE_SECRET'],
+            "DELETE",
+            "/")
+        authorization_content =\
+            signatures.new_authorization_header("C2", signature)
+
+        for ip, host in environments.items():
+            for port, node_info in host.items():
+                sessions.append((node_info['session_id'],))
+
+                try:
+                    resp = rq.delete(
+                        f"http://{ip}:{port}/",
+                        headers={'Authorization': authorization_content})
+                except rq.exceptions.ConnectionError:
+                    print(f"Node at {ip}:{port} could not be reached.")
+                else:
+                    if resp.status_code != 204:
+                        print(f"Unexpected responde from node at {ip}:{port}.")
+                    else:
+                        print(f"Node at {ip}:{port} reached.")
+
+        db = sqlite3.connect(DATABASE_PATH)
+        db.executemany(
+            """UPDATE session
+            SET session_end = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+            WHERE id_session = ?""",
+            sessions)
+        db.commit()
+    
+    print("Exiting...")
+    sys.exit()
 
 
 SCRIPT_PATH = os.path.dirname(os.path.abspath(__file__))
@@ -687,6 +814,9 @@ try:
 except Exception as e:
     print(str(e))
 environments = {}
+
+signal.signal(signal.SIGTERM, exit_gracefully)
+signal.signal(signal.SIGINT, exit_gracefully)
 
 if __name__ == "__main__":
     app.run(host=config['IP'], port=config['PORT'])
