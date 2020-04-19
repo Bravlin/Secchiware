@@ -128,7 +128,7 @@ def delete_package(package):
     installed.delete(package)
     return Response(status=204, mimetype="application/json")
 
-@app.route("/report", methods=["GET"])
+@app.route("/reports", methods=["GET"])
 def execute_tests():
     def split_parameter(x):
         if isinstance(x, str):

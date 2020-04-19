@@ -55,7 +55,7 @@ paths:
           description: Shutdown petition recieved correctly
         '401':
           $ref: '#/components/responses/401Unauthorized'
-  /report:
+  /reports:
     get:
       summary: Executes tests installed in the node and returns the corresponding report.
       description: >

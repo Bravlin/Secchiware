@@ -102,6 +102,17 @@ components:
     TestReport:
       $ref: 'common.yaml#/components/schemas/TestReport'
   parameters:
+    arrange:
+      in: query
+      name: arrange
+      required: false
+      schema:
+        type: string
+        enum: [asc, desc]
+      description: > 
+        Used to specify wheter the results must be ordered in ascending or descending order.
+        This paramater is only valid if the parameter `order_by` is present.
+        If `order_by` is present and this parameter is omitted, the default arrengement is in ascending order.
     environmentIP:
       in: path
       name: ip
@@ -119,6 +130,14 @@ components:
         type: string
       description: The port of a registered environment.
       example: 5100
+    limit:
+      in: query
+      name: limit
+      required: false
+      schema:
+        type: integer
+      description: The max number of instances of the requested resource to be returned by the search.
+      example: 10
     sessionID:
       in: path
       name: session_id
@@ -447,15 +466,15 @@ paths:
           $ref: '#/components/responses/502BadGateway'
         '504':
           $ref: '#/components/responses/504EnvironmentUnresponsive'
-  /environments/{ip}/{port}/report:
+  /environments/{ip}/{port}/reports:
     get:
       summary: Executes the specified tests at the given environment and recovers the corresponding report.
       parameters:
         - $ref: '#/components/parameters/environmentIP'
         - $ref: '#/components/parameters/environmentPort'
-        - $ref: 'node_api.yaml#/paths/~1report/get/parameters/0'
-        - $ref: 'node_api.yaml#/paths/~1report/get/parameters/1'
-        - $ref: 'node_api.yaml#/paths/~1report/get/parameters/2'
+        - $ref: 'node_api.yaml#/paths/~1reports/get/parameters/0'
+        - $ref: 'node_api.yaml#/paths/~1reports/get/parameters/1'
+        - $ref: 'node_api.yaml#/paths/~1reports/get/parameters/2'
       responses:
         '200':
           description: OK
@@ -480,6 +499,116 @@ paths:
           $ref: '#/components/responses/502BadGateway'
         '504':
           $ref: '#/components/responses/504EnvironmentUnresponsive'
+  /executions:
+    get:
+      summary: Searches for executions that match the given criteria.
+      parameters:
+        - in: query
+          name: id
+          required: false
+          schema:
+            type: string
+          description: The ids of specific executions to filter separated by commas.
+          style: form
+          explode: false
+          examples:
+            singleID:
+              value: 1
+              summary: A given single ID
+            someIDs:
+              value: 1,2,3
+              summary: A given list of ids
+        - in: query
+          name: session
+          required: false
+          schema:
+            type: string
+          description: >
+            Allows to specify to which sessions the executions must belong to by their ids.
+            To specify more than one session commas must be place between ids.
+          style: form
+          explode: false
+          examples:
+            singleSession:
+              value: 1
+              summary: A given single session
+            someSessions:
+              value: 1,2,3
+              summary: A given list of sessions
+        - in: query
+          name: registered_from
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: Filters executions by specifying the oldest registration date allowed.
+          style: form
+          explode: false
+          allowReserved: true
+          example: 2020-02-02T02:02:02Z
+        - in: query
+          name: registered_to
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: Filters executions by specifying the most recent registration date allowed.
+          style: form
+          explode: false
+          allowReserved: true
+          example: 2020-04-04T04:04:04Z
+        - in: query
+          name: order_by
+          required: false
+          schema:
+            type: string
+            enum:
+              - id
+              - session
+              - registered
+          description: >
+            Sorts the data by the specified parameter.
+            Accepted fields:
+              * `id` - Sorts by execution id
+              * `session` - Sorts by session id
+              * `registered` - Sorts by time of registration
+          style: form
+          explode: false
+        - $ref: '#/components/parameters/arrange'
+        - $ref: '#/components/parameters/limit'
+      responses:
+        '200':
+          description: OK
+          headers:
+            Access-Control-Allow-Origin:
+              schema:
+                type: string
+              description: Provides cross origin access to the specified domain
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    execution_id:
+                      type: integer
+                      example: 32
+                    session_id:
+                      type: integer
+                      example: 14
+                    timestamp_registered:
+                      type: string
+                      format: date-time
+                      example: 2020-03-03T15:15:15Z
+                    reports:
+                      type: array
+                      items:
+                        $ref: '#/components/schemas/TestReport'
+                  required:
+                    - execution_id
+                    - session_id
+                    - timestamp_registered
   /executions/{execution_id}:
     delete:
       summary: Deletes the specified execution and all its associated tests reports.

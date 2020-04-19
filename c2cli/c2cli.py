@@ -247,7 +247,7 @@ def execute_tests(ip, port, package, module, test_set):
 
     try:
         resp = requests.get(
-            f"{C2_URL}/environments/{ip}/{port}/report{query}")
+            f"{C2_URL}/environments/{ip}/{port}/reports{query}")
     except requests.exceptions.ConnectionError:
             print("Connection refused.")
     else:

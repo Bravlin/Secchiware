@@ -441,11 +441,11 @@ def delete_installed_package(ip, port, package):
         return abort(404, description=f"'{package}' not found at {ip}:{port}")
     abort(502, description=f"Unexpected response from node at {ip}:{port}")
 
-@app.route("/environments/<ip>/<port>/report", methods=["GET"])
+@app.route("/environments/<ip>/<port>/reports", methods=["GET"])
 def execute_tests(ip, port):
     check_registered(ip, port)
     
-    url = f"http://{ip}:{port}/report"
+    url = f"http://{ip}:{port}/reports"
     if request.args:
         valid_keys = {'packages', 'modules', 'test_sets'}
         difference = set(request.args.keys()) - valid_keys
@@ -493,51 +493,86 @@ def execute_tests(ip, port):
 
     return jsonify(resp.json())
 
-@app.route("/test_sets", methods=["GET"])
-def list_available_test_sets():
-    return jsonify(available.content)
+@app.route("/executions", methods=["GET"])
+def get_executions():
+    db = get_database()
 
-@app.route("/test_sets", methods=["PATCH"])
-def upload_test_sets():
-    global available
-
-    if not request.mimetype == 'multipart/form-data':
-        abort(415, description="Invalid request's content type")
-    check_digest_header()
-    if not (request.files and 'packages' in request.files):
-        abort(400, description="'packages' key not found in request's body")
-    check_authorization_header(client_key_recoverer, "Digest")
+    if not request.args:
+        cursor = db.execute("SELECT * FROM execution")
+    else:
+        try:
+            cursor = api_parametrized_search(
+                db=db,
+                table="execution",
+                order_by_api_to_db={
+                    'id': "id_execution",
+                    'session': "fk_session",
+                    'registered': 'timestamp_registered',
+                },
+                where_api_to_db={
+                    'id': ("id_execution", "="),
+                    'session': ("fk_session", "="),
+                    'registered_from': ("timestamp_registered", ">="),
+                    'registered_to': ("timestamp_registered", "<="),
+                },
+                parameters=request.args,
+                select_columns=("*",))
+        except ValueError as e:
+            abort(400, str(e))
     
-    try:
-        new_packages = test_utils.uncompress_test_packages(
-            request.files['packages'],
-            TESTS_PATH)
-    except Exception as e:
-        print(str(e))
-        abort(400, description="Invalid file content")
+    results = []
+    execution = cursor.fetchone()
+    subcursor = db.cursor()
+    while execution:
+        reports = []
+        subcursor.execute(
+            """SELECT test_name, test_description, result_code,
+            additional_info, timestamp_start, timestamp_end
+            FROM report
+            WHERE fk_execution = ?
+            ORDER BY timestamp_start""",
+            (execution['id_execution'],))
+        report = subcursor.fetchone()
+        while report:
+            report_dict = {
+                'test_name': report['test_name'],
+                'test_description': report['test_description'],
+                'result_code': report['result_code'],
+                'timestamp_start': report['timestamp_start'],
+                'timestamp_end': report['timestamp_end'],
+            }
+            if report['additional_info']:
+                report_dict['additional_info'] =\
+                    json.loads(report['additional_info'])
+            reports.append(report_dict)
+            report = subcursor.fetchone()
+        
+        execution_dict = {
+            'execution_id': execution['id_execution'],
+            'session_id': execution['fk_session'],
+            'timestamp_registered': execution['timestamp_registered']
+        }
+        if reports:
+            execution_dict['reports'] = reports
+        results.append(execution_dict)
 
-    new_info = []
-    for new_pack in new_packages:
-        new_pack = f"test_sets.{new_pack}"
-        # If it is a new version, the next sentence removes the old one
-        test_utils.clean_package(new_pack)
-        new_info.append(
-            test_utils.get_installed_package(new_pack))
-    available.batch_insert(new_info)
-    return Response(status=204, mimetype="application/json")
+        execution = cursor.fetchone()
+    
+    return jsonify(results)
 
-@app.route("/test_sets/<package>", methods=["DELETE"])
-def delete_package(package):
-    global available
-
+@app.route("/executions/<execution_id>", methods=["DELETE"])
+def delete_execution(execution_id):
     check_authorization_header(client_key_recoverer)
 
-    package_path = os.path.join(TESTS_PATH, package)
-    if not os.path.isdir(package_path):
-        abort(404, description=f"Package '{package}' not found")
+    db = get_database()
+    cursor = db.execute(
+        "DELETE FROM execution WHERE id_execution = ?", (execution_id,))
+    
+    if cursor.rowcount != 1:
+        abort(404, "No execution found with given id")
 
-    shutil.rmtree(package_path)
-    available.delete(package)
+    db.commit()
+
     return Response(status=204, mimetype="application/json")
 
 @app.route("/sessions", methods=["GET"])
@@ -670,84 +705,51 @@ def delete_session(session_id):
 
     return Response(status=204, mimetype="application/json")
 
-@app.route("/executions", methods=["GET"])
-def get_executions():
-    db = get_database()
+@app.route("/test_sets", methods=["GET"])
+def list_available_test_sets():
+    return jsonify(available.content)
 
-    if not request.args:
-        cursor = db.execute("SELECT * FROM execution")
-    else:
-        try:
-            cursor = api_parametrized_search(
-                db=db,
-                table="execution",
-                order_by_api_to_db={
-                    'id': "id_execution",
-                    'session': "fk_session",
-                    'registered': 'timestamp_registered',
-                },
-                where_api_to_db={
-                    'id': ("id_execution", "="),
-                    'session': ("fk_session", "="),
-                    'registered_from': ("timestamp_registered", ">="),
-                    'registered_to': ("timestamp_registered", "<="),
-                },
-                parameters=request.args,
-                select_columns=("*",))
-        except ValueError as e:
-            abort(400, str(e))
+@app.route("/test_sets", methods=["PATCH"])
+def upload_test_sets():
+    global available
+
+    if not request.mimetype == 'multipart/form-data':
+        abort(415, description="Invalid request's content type")
+    check_digest_header()
+    if not (request.files and 'packages' in request.files):
+        abort(400, description="'packages' key not found in request's body")
+    check_authorization_header(client_key_recoverer, "Digest")
     
-    results = []
-    execution = cursor.fetchone()
-    subcursor = db.cursor()
-    while execution:
-        reports = []
-        subcursor.execute(
-            """SELECT test_name, test_description, result_code,
-            additional_info, timestamp_start, timestamp_end
-            FROM report
-            WHERE fk_execution = ?
-            ORDER BY timestamp_start""",
-            (execution['id_execution'],))
-        report = subcursor.fetchone()
-        while report:
-            report_dict = {
-                'test_name': report['test_name'],
-                'test_description': report['test_description'],
-                'result_code': report['result_code'],
-                'timestamp_start': report['timestamp_start'],
-                'timestamp_end': report['timestamp_end'],
-            }
-            if report['additional_info']:
-                report_dict['additional_info'] =\
-                    json.loads(report['additional_info'])
-            reports.append(report_dict)
-            report = subcursor.fetchone()
-        
-        results.append({
-            'execution_id': execution['id_execution'],
-            'session_id': execution['fk_session'],
-            'timestamp_registered': execution['timestamp_registered'],
-            'reports': reports
-        })
+    try:
+        new_packages = test_utils.uncompress_test_packages(
+            request.files['packages'],
+            TESTS_PATH)
+    except Exception as e:
+        print(str(e))
+        abort(400, description="Invalid file content")
 
-        execution = cursor.fetchone()
-    
-    return jsonify(results)
+    new_info = []
+    for new_pack in new_packages:
+        new_pack = f"test_sets.{new_pack}"
+        # If it is a new version, the next sentence removes the old one
+        test_utils.clean_package(new_pack)
+        new_info.append(
+            test_utils.get_installed_package(new_pack))
+    available.batch_insert(new_info)
+    return Response(status=204, mimetype="application/json")
 
-@app.route("/executions/<execution_id>", methods=["DELETE"])
-def delete_execution(execution_id):
+@app.route("/test_sets/<package>", methods=["DELETE"])
+def delete_package(package):
+    global available
+
     check_authorization_header(client_key_recoverer)
 
-    db = get_database()
-    cursor = db.execute(
-        "DELETE FROM execution WHERE id_execution = ?", (execution_id,))
-    
-    if cursor.rowcount != 1:
-        abort(404, "No execution found with given id")
+    package_path = os.path.join(TESTS_PATH, package)
+    if not os.path.isdir(package_path):
+        abort(404, description=f"Package '{package}' not found")
 
-    db.commit()
-
+    shutil.rmtree(package_path)
+    available.delete(package)
     return Response(status=204, mimetype="application/json")
 
 
