@@ -201,7 +201,6 @@ def check_authorization_header(key_recoverer, *mandatory_headers):
 
 app = Flask(__name__)
 CORS(app, resources={
-    r"/": {},
     r"/environments": {'methods': "GET"},
     r"/environments/[^/]+/[^/]+/+": {},
     r"/test_sets/*": {},
@@ -241,10 +240,6 @@ def bad_gateway(e):
 def gateway_timeout(e):
     return jsonify(error=str(e)), 504
 
-
-@app.route("/", methods=["GET"])
-def is_up():
-    return jsonify(success=True)
 
 @app.route("/environments", methods=["GET"])
 def list_environments():
@@ -626,7 +621,6 @@ def get_session(session_id):
     result = {
         'session_id': row['id_session'],
         'session_start': row['session_start'],
-        'session_end': row['session_end'],
         'ip': row['env_ip'],
         'port': row['env_port'],
         'platform_info': {
@@ -650,6 +644,9 @@ def get_session(session_id):
         },
         'total_executions': row['total_executions']
     }
+
+    if row['session_end']:
+        result['session_end'] = row['session_end']
 
     return jsonify(result)
 
@@ -696,7 +693,7 @@ def get_executions():
                     'registered_to': ("timestamp_registered", "<="),
                 },
                 parameters=request.args,
-                select_columns=("*"))
+                select_columns=("*",))
         except ValueError as e:
             abort(400, str(e))
     
@@ -790,6 +787,7 @@ def exit_gracefully(sig, frame):
             WHERE id_session = ?""",
             sessions)
         db.commit()
+        db.close()
     
     print("Exiting...")
     sys.exit()

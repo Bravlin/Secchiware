@@ -119,6 +119,14 @@ components:
         type: string
       description: The port of a registered environment.
       example: 5100
+    sessionID:
+      in: path
+      name: session_id
+      required: true
+      schema:
+        type: integer
+      description: The id of a stored session.
+      example: 7
     topPackage:
       $ref: 'node_api.yaml#/paths/~1test_sets~1{package}/delete/parameters/0'
   responses:
@@ -472,6 +480,101 @@ paths:
           $ref: '#/components/responses/502BadGateway'
         '504':
           $ref: '#/components/responses/504EnvironmentUnresponsive'
+  /executions/{execution_id}:
+    delete:
+      summary: Deletes the specified execution and all its associated tests reports.
+      parameters:
+        - in: path
+          name: execution_id
+          required: true
+          schema:
+            type: integer
+          description: The id of a stored execution.
+          example: 5
+      security:
+        - SecchiwareAuth: [Client]
+      responses:
+        '204':
+          description: Execution deleted successfully
+          headers:
+            Access-Control-Allow-Origin:
+              schema:
+                type: string
+              description: Provides cross origin access to the specified domain
+        '401':
+          $ref: '#/components/responses/401UnauthorizedClient'
+        '404':
+          $ref: '#/components/responses/404ResourceNotFound'
+  /sessions/{session_id}:
+    get:
+      summary: Recovers the information about the specified session.
+      parameters:
+        - $ref: '#/components/parameters/sessionID'
+      responses:
+        '200':
+          description: OK
+          headers:
+            Access-Control-Allow-Origin:
+              schema:
+                type: string
+              description: Provides cross origin access to the specified domain
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  session_id:
+                    type: integer
+                    example: 11
+                  session_start:
+                    type: string
+                    format: date-time
+                    example: 2020-04-02T16:20:00
+                  session_end:
+                    type: string
+                    format: date-time
+                    example: 2020-04-02T17:20:00
+                  ip:
+                    type: string
+                    example: 192.167.0.8
+                  port:
+                    type: integer
+                    example: 4500
+                  platform_info:
+                    $ref: '#/components/schemas/EnvironmentPlatformInformation'
+                  total_executions:
+                    type: integer
+                    example: 4
+                required:
+                  - session_id
+                  - session_start
+                  - ip
+                  - port
+                  - platform_info
+                  - total_executions
+        '404':
+          $ref: '#/components/responses/404ResourceNotFound'
+    delete:
+      summary: Deletes the specified session and all its associated executions and tests reports.
+      description: Only finished session are allowed.
+      parameters:
+        - $ref: '#/components/parameters/sessionID'
+      security:
+        - SecchiwareAuth: [Client]
+      responses:
+        '204':
+          description: Session deleted successfully
+          headers:
+            Access-Control-Allow-Origin:
+              schema:
+                type: string
+              description: Provides cross origin access to the specified domain
+        '400':
+          $ref: '#/components/responses/400InvalidRequest'
+        '401':
+          $ref: '#/components/responses/401UnauthorizedClient'
+        '404':
+          $ref: '#/components/responses/404ResourceNotFound'
   /test_sets:
     get:
       summary: Gets all root packages at the C&C server's repository.

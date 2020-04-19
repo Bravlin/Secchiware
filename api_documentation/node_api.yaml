@@ -45,6 +45,16 @@ components:
             $ref: '#/components/schemas/HTTPError'
 
 paths:
+  /:
+    delete:
+      summary: Stops the node.
+      security:
+        - SecchiwareAuth: [C2]
+      responses:
+        '204':
+          description: Shutdown petition recieved correctly
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
   /report:
     get:
       summary: Executes tests installed in the node and returns the corresponding report.
