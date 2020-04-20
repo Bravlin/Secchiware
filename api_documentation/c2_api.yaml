@@ -507,9 +507,10 @@ paths:
           name: id
           required: false
           schema:
-            type: string
-          description: The ids of specific executions to filter separated by commas.
+            type: integer
+          description: The ids of specific executions to filter by separated by commas.
           style: form
+          allowReserved: true
           explode: false
           examples:
             singleID:
@@ -522,12 +523,13 @@ paths:
           name: session
           required: false
           schema:
-            type: string
+            type: integer
           description: >
             Allows to specify to which sessions the executions must belong to by their ids.
             To specify more than one session commas must be place between ids.
           style: form
           explode: false
+          allowReserved: true
           examples:
             singleSession:
               value: 1
@@ -634,6 +636,186 @@ paths:
           $ref: '#/components/responses/401UnauthorizedClient'
         '404':
           $ref: '#/components/responses/404ResourceNotFound'
+  /sessions:
+    get:
+      summary: Searches for sessions that match the given criteria.
+      parameters:
+        - in: query
+          name: id
+          required: false
+          schema:
+            type: integer
+          description: The ids of specific sessions to filter by, separated by commas.
+          style: form
+          explode: false
+          allowReserved: true
+          examples:
+            singleID:
+              value: 1
+              summary: A given single ID
+            someIDs:
+              value: 1,2,3
+              summary: A given list of ids
+        - in: query
+          name: start_from
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: Filters sessions by specifying the oldest start date allowed.
+          style: form
+          explode: false
+          allowReserved: true
+          example: 2020-02-02T02:02:02Z
+        - in: query
+          name: start_to
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: Filters sessions by specifying the most recent start date allowed.
+          style: form
+          explode: false
+          allowReserved: true
+          example: 2020-04-04T04:04:04Z
+        - in: query
+          name: end_from
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: Filters sessions by specifying the oldest end date allowed.
+          style: form
+          explode: false
+          allowReserved: true
+          example: 2020-02-02T02:02:02Z
+        - in: query
+          name: end_to
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: Filters sessions by specifying the most recent end date allowed.
+          style: form
+          explode: false
+          allowReserved: true
+          example: 2020-04-04T04:04:04Z
+        - in: query
+          name: ip
+          required: false
+          schema:
+            type: string
+            format: ip
+          description: The specific IPs of the sessions to filter by, separated by commas.
+          style: form
+          explode: false
+          allowReserved: true
+          examples:
+            singleIP:
+              value: 192.168.0.8
+              description: A given single IP
+            multipleIPs:
+              value: 192.168.0.8,192.168.0.2,192.168.0.4
+              description: A list of comma seperated IPs
+        - in: query
+          name: port
+          required: false
+          schema:
+            type: integer
+          description: The specific ports of the sessions to filter by, separated by commas.
+          style: form
+          explode: false
+          allowReserved: true
+          examples:
+            singlePort:
+              value: 4000
+              description: A given single port
+            multiplePorts:
+              value: 4000,5000,6000
+              description: A list of comma seperated ports
+        - in: query
+          name: system
+          required: false
+          schema:
+            type: string
+          description: Filters session by specifying their corresponding operating system.
+          style: form
+          explode: false
+          allowReserved: true
+          examples:
+            singleSystem:
+              value: Linux
+              description: A given single system
+            multipleSystems:
+              value: Linux,Windows
+              description: A list of comma seperated systems
+        - in: query
+          name: order_by
+          required: false
+          schema:
+            type: string
+            enum:
+              - id
+              - start
+              - end
+              - ip
+              - port
+              - system
+          description: >
+            Sorts the data by the specified parameter.
+            Accepted fields:
+              * `id` - Sorts by session id
+              * `start` - Sorts by session start timestamp
+              * `end` - Sorts by session end timestamp
+              * `ip` - Sorts by session IP
+              * `port` - Sorts by session port
+              * `system` - Sorts by operating system associated to the session
+          style: form
+          explode: false
+        - $ref: '#/components/parameters/arrange'
+        - $ref: '#/components/parameters/limit'
+      responses:
+        '200':
+          description: OK
+          headers:
+            Access-Control-Allow-Origin:
+              schema:
+                type: string
+              description: Provides cross origin access to the specified domain
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    session_id:
+                      type: integer
+                      example: 40
+                    session_start:
+                      type: string
+                      format: date-time
+                      example: 2020-01-01T01:01:01
+                    session_end:
+                      type: string
+                      format: date-time
+                      example: 2020-01-01T02:02:02
+                    ip:
+                      type: string
+                      format: ip
+                      example: 192.168.0.14
+                    port:
+                      type: integer
+                      example: 4900
+                    platform_os_system:
+                      type: string
+                      example: Linux
+                  required:
+                    - session_id
+                    - session_start
+                    - ip
+                    - port
+                    - platform_os_system
   /sessions/{session_id}:
     get:
       summary: Recovers the information about the specified session.

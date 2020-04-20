@@ -203,9 +203,9 @@ app = Flask(__name__)
 CORS(app, resources={
     r"/environments": {'methods': "GET"},
     r"/environments/[^/]+/[^/]+/+": {},
-    r"/test_sets/*": {},
+    r"/executions/*": {},
     r"/sessions/*": {},
-    r"/executions/*": {}
+    r"/test_sets/*": {}
 })
 
 
@@ -622,14 +622,17 @@ def search_sessions():
     results = []
     row = cursor.fetchone()
     while row:
-        results.append({
+        session_dict = {
             'session_id': row['id_session'],
             'session_start': row['session_start'],
-            'session_end': row['session_end'],
             'ip': row['env_ip'],
             'port': row['env_port'],
             'platform_os_system': row['env_os_system']
-        })
+        }
+        if row['session_end']:
+            session_dict['session_end'] = row['session_end']
+        results.append(session_dict)
+
         row = cursor.fetchone()
 
     return jsonify(results)
