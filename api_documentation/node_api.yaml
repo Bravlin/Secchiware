@@ -64,57 +64,63 @@ paths:
       parameters:
         - in: query
           name: packages
-          schema: 
-            type: string
+          schema:
+            type: array
+            items:
+              type: string
           description: The canonical names of the packages to be executed entirely separated by commas.
           style: form
           explode: false
           allowReserved: true
           examples:
             topPackage:
-              value: some_package
+              value: [some_package]
               summary: A top level package
             subpackage:
-              value: some_package.subpackage
+              value: [some_package.subpackage]
               summary: A child package
             list:
-              value: some_package,other_package
+              value: [some_package, other_package]
               summary: Comma separated packages
         - in: query
           name: modules
-          schema: 
-            type: string
+          schema:
+            type: array
+            items:
+              type: string
           description: The canonical names of the modules to be executed entirely separated by commas.
           style: form
           explode: false
           allowReserved: true
           examples:
             simpleCase:
-              value: some_package.some_module
+              value: [some_package.some_module]
               summary: A module contained in a package
             moduleInSubpackage:
-              value: some_package.subpackage.a_module
+              value: [psome_package.subpackage.a_module]
               summary: A module contained in a subpackage
             list:
-              value: some_package.some_module,some_package.other_module,other_package.a_module
+              value: [some_package.some_module, some_package.other_module, other_package.a_module]
               summary: Comma separated modules
         - in: query
           name: test_sets
-          schema: 
-            type: string
+          schema:
+            type: array
+            items:
+              type: string
           description: The canonical names of the test sets to be executed separated by commas.
           style: form
           explode: false
           allowReserved: true
           examples:
             simpleCase:
-              value: some_package.some_module.SomeTestSet
+              value: [some_package.some_module.SomeTestSet]
               summary: A test set contained in a module
             moduleInSubpackage:
-              value: some_package.subpackage.a_module.ATestSet
+              value: [some_package.subpackage.a_module.ATestSet]
               summary: A test set from a module in a subpackage
             list:
-              value: some_package.some_module.SomeTestSet,other_package.subpackage.a_module.OtherTestSet
+              value: [some_package.some_module.SomeTestSet, other_package.subpackage.a_module.OtherTestSet]
               summary: Comma separated test sets
       responses:
         '200':

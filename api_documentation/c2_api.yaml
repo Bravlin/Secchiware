@@ -507,35 +507,37 @@ paths:
           name: id
           required: false
           schema:
-            type: integer
+            type: array
+            items:
+              type: integer
           description: The ids of specific executions to filter by separated by commas.
           style: form
-          allowReserved: true
           explode: false
           examples:
             singleID:
-              value: 1
+              value: [1]
               summary: A given single ID
             someIDs:
-              value: 1,2,3
+              value: [1, 2, 3]
               summary: A given list of ids
         - in: query
           name: session
           required: false
           schema:
-            type: integer
+            type: array
+            items:
+              type: integer
           description: >
             Allows to specify to which sessions the executions must belong to by their ids.
             To specify more than one session commas must be place between ids.
           style: form
           explode: false
-          allowReserved: true
           examples:
             singleSession:
-              value: 1
+              value: [1]
               summary: A given single session
             someSessions:
-              value: 1,2,3
+              value: [1, 2, 3]
               summary: A given list of sessions
         - in: query
           name: registered_from
@@ -545,7 +547,6 @@ paths:
             format: date-time
           description: Filters executions by specifying the oldest registration date allowed.
           style: form
-          explode: false
           allowReserved: true
           example: 2020-02-02T02:02:02Z
         - in: query
@@ -556,7 +557,6 @@ paths:
             format: date-time
           description: Filters executions by specifying the most recent registration date allowed.
           style: form
-          explode: false
           allowReserved: true
           example: 2020-04-04T04:04:04Z
         - in: query
@@ -575,7 +575,6 @@ paths:
               * `session` - Sorts by session id
               * `registered` - Sorts by time of registration
           style: form
-          explode: false
         - $ref: '#/components/parameters/arrange'
         - $ref: '#/components/parameters/limit'
       responses:
@@ -611,6 +610,8 @@ paths:
                     - execution_id
                     - session_id
                     - timestamp_registered
+        '400':
+          $ref: '#/components/responses/400InvalidRequest'
   /executions/{execution_id}:
     delete:
       summary: Deletes the specified execution and all its associated tests reports.
@@ -644,17 +645,18 @@ paths:
           name: id
           required: false
           schema:
-            type: integer
+            type: array
+            items:
+              type: integer
           description: The ids of specific sessions to filter by, separated by commas.
           style: form
           explode: false
-          allowReserved: true
           examples:
             singleID:
-              value: 1
+              value: [1]
               summary: A given single ID
             someIDs:
-              value: 1,2,3
+              value: [1, 2, 3]
               summary: A given list of ids
         - in: query
           name: start_from
@@ -675,7 +677,6 @@ paths:
             format: date-time
           description: Filters sessions by specifying the most recent start date allowed.
           style: form
-          explode: false
           allowReserved: true
           example: 2020-04-04T04:04:04Z
         - in: query
@@ -686,7 +687,6 @@ paths:
             format: date-time
           description: Filters sessions by specifying the oldest end date allowed.
           style: form
-          explode: false
           allowReserved: true
           example: 2020-02-02T02:02:02Z
         - in: query
@@ -704,51 +704,55 @@ paths:
           name: ip
           required: false
           schema:
-            type: string
-            format: ip
+            type: array
+            items:
+              type: string
+              format: ip
           description: The specific IPs of the sessions to filter by, separated by commas.
           style: form
           explode: false
-          allowReserved: true
           examples:
             singleIP:
-              value: 192.168.0.8
+              value: [192.168.0.8]
               description: A given single IP
             multipleIPs:
-              value: 192.168.0.8,192.168.0.2,192.168.0.4
-              description: A list of comma seperated IPs
+              value: [192.168.0.8, 192.168.0.2, 192.168.0.4]
+              description: A list of IPs separated by commas
         - in: query
           name: port
           required: false
           schema:
-            type: integer
+            type: array
+            items:
+              type: integer
           description: The specific ports of the sessions to filter by, separated by commas.
           style: form
           explode: false
-          allowReserved: true
           examples:
             singlePort:
-              value: 4000
+              value: [4000]
               description: A given single port
             multiplePorts:
-              value: 4000,5000,6000
-              description: A list of comma seperated ports
+              value: [4000, 5000, 6000]
+              description: A list of ports separated by commas
         - in: query
           name: system
           required: false
           schema:
-            type: string
+            type: array
+            items:
+              type: string
           description: Filters session by specifying their corresponding operating system.
           style: form
           explode: false
           allowReserved: true
           examples:
             singleSystem:
-              value: Linux
+              value: [Linux]
               description: A given single system
             multipleSystems:
-              value: Linux,Windows
-              description: A list of comma seperated systems
+              value: [Linux, Windows]
+              description: A list of systems separated by commas
         - in: query
           name: order_by
           required: false
@@ -771,7 +775,6 @@ paths:
               * `port` - Sorts by session port
               * `system` - Sorts by operating system associated to the session
           style: form
-          explode: false
         - $ref: '#/components/parameters/arrange'
         - $ref: '#/components/parameters/limit'
       responses:
@@ -816,6 +819,8 @@ paths:
                     - ip
                     - port
                     - platform_os_system
+        '400':
+          $ref: '#/components/responses/400InvalidRequest'
   /sessions/{session_id}:
     get:
       summary: Recovers the information about the specified session.
