@@ -73,6 +73,33 @@ def stop_node():
 
     return Response(status=204, mimetype="application/json")
 
+@app.route("/reports", methods=["GET"])
+def execute_tests():
+    def split_parameter(x):
+        if isinstance(x, str):
+            return x.split(",")
+        raise ValueError
+
+    if not request.args:
+        tests = test_utils.TestSetCollection("test_sets")
+    else:
+        valid_keys = {'packages', 'modules', 'test_sets'}
+        params = request.args
+        if {*params.keys()} - valid_keys:
+            abort(400, "Invalid query parameters")
+        else:
+            packages = params.get('packages', [], split_parameter)
+            modules = params.get('modules', [], split_parameter)
+            test_sets = params.get('test_sets', [], split_parameter)
+
+        tests = test_utils.TestSetCollection(
+            "test_sets",
+            packages,
+            modules,
+            test_sets)
+    
+    return jsonify(tests.run_all_tests())
+
 @app.route("/test_sets", methods=["GET"])
 def list_installed_test_sets():
     return jsonify(installed.content)
@@ -127,33 +154,6 @@ def delete_package(package):
     shutil.rmtree(package_path)
     installed.delete(package)
     return Response(status=204, mimetype="application/json")
-
-@app.route("/reports", methods=["GET"])
-def execute_tests():
-    def split_parameter(x):
-        if isinstance(x, str):
-            return x.split(",")
-        raise ValueError
-
-    if not request.args:
-        tests = test_utils.TestSetCollection("test_sets")
-    else:
-        valid_keys = {'packages', 'modules', 'test_sets'}
-        params = request.args
-        if {*params.keys()} - valid_keys:
-            abort(400, "Invalid query parameters")
-        else:
-            packages = params.get('packages', [], split_parameter)
-            modules = params.get('modules', [], split_parameter)
-            test_sets = params.get('test_sets', [], split_parameter)
-
-        tests = test_utils.TestSetCollection(
-            "test_sets",
-            packages,
-            modules,
-            test_sets)
-    
-    return jsonify(tests.run_all_tests())
 
 
 def get_platform_info() -> dict:

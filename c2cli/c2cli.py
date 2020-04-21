@@ -102,7 +102,85 @@ def lsenv():
         envs = resp.json()
         for ip, ports in envs.items():
             for port, content in ports.items():
-                print(f"{ip}:{port} {content['session_start']}")
+                print(
+                    f"\n{ip}:{port}\nsession: {content['session_id']}\n"\
+                    f"start: {content['session_start']}\n")
+
+@main.command("sessions_search")
+@click.option("--session_id", multiple=True)
+@click.option("--start_from")
+@click.option("--start_to")
+@click.option("--end_from")
+@click.option("--end_to")
+@click.option("--ip", multiple=True)
+@click.option("--port", multiple=True)
+@click.option("--system", multiple=True)
+@click.option("--order_by")
+@click.option("--arrange")
+@click.option("--limit")
+def search_sessions(
+        session_id,
+        start_from,
+        start_to,
+        end_from,
+        end_to,
+        ip,
+        port,
+        system,
+        order_by,
+        arrange,
+        limit):
+    query = ""
+    if session_id:
+        query = f"{query}&ids={','.join(session_id)}"
+    if start_from:
+        query = f"{query}&start_from={start_from}"
+    if start_to:
+        query = f"{query}&start_to={start_to}"
+    if end_from:
+        query = f"{query}&end_from={end_from}"
+    if end_to:
+        query = f"{query}&end_to={end_to}"
+    if ip:
+        query = f"{query}&ips={','.join(ip)}"
+    if port:
+        query = f"{query}&ports={','.join(port)}"
+    if system:
+        query = f"{query}&systems={','.join(system)}"
+    if order_by:
+        query = f"{query}&order_by={order_by}"
+    if arrange:
+        query = f"{query}&arrange={arrange}"
+    if limit:
+        query = f"{query}&limit={limit}"
+    query = query.replace("&", "?", 1)
+
+    try:
+        resp = requests.get(f"{C2_URL}/sessions{query}")
+    except requests.exceptions.ConnectionError:
+        print("Connection refused.")
+    else:
+        if resp.status_code == 200:
+            print(json.dumps(resp.json(), indent=2))
+        elif resp.status_code == 400:
+            print(resp.json()['error'])
+        else:
+            print("Unexpected response from Command and Control Sever.")
+
+@main.command("session_get")
+@click.argument("session")
+def get_session(session):
+    try:
+        resp = requests.get(f"{C2_URL}/sessions/{session}")
+    except requests.exceptions.ConnectionError:
+        print("Connection refused.")
+    else:
+        if resp.status_code == 200:
+            print(json.dumps(resp.json(), indent=2))
+        elif resp.status_code == 404:
+            print(resp.json()['error'])
+        else:
+            print("Unexpected response from Command and Control Sever.")
 
 @main.command("session_delete")
 @click.option('--password', prompt=True, hide_input=True)
@@ -125,6 +203,76 @@ def delete_sessions(password, sessions):
             print("Connection refused.")
         else:
             if resp.status_code in {400, 401, 404}:
+                print(resp.json()['error'])
+            elif resp.status_code != 204:
+                print("Unexpected response from Command and Control Sever.")
+
+@main.command("executions_search")
+@click.option("--execution_id", multiple=True)
+@click.option("--session", multiple=True)
+@click.option("--registered_from")
+@click.option("--registered_to")
+@click.option("--order_by")
+@click.option("--arrange")
+@click.option("--limit")
+def search_executions(
+        execution_id,
+        session,
+        registered_from,
+        registered_to,
+        order_by,
+        arrange,
+        limit):
+    query = ""
+    if execution_id:
+        query = f"{query}&ids={','.join(execution_id)}"
+    if session:
+        query = f"{query}&sessions={','.join(session)}"
+    if registered_from:
+        query = f"{query}&registered_from={registered_from}"
+    if registered_to:
+        query = f"{query}&registered_to={registered_to}"
+    if order_by:
+        query = f"{query}&order_by={order_by}"
+    if arrange:
+        query = f"{query}&arrange={arrange}"
+    if limit:
+        query = f"{query}&limit={limit}"
+    query = query.replace("&", "?", 1)
+
+    try:
+        resp = requests.get(f"{C2_URL}/executions{query}")
+    except requests.exceptions.ConnectionError:
+        print("Connection refused.")
+    else:
+        if resp.status_code == 200:
+            print(json.dumps(resp.json(), indent=2))
+        elif resp.status_code == 400:
+            print(resp.json()['error'])
+        else:
+            print("Unexpected response from Command and Control Sever.")
+
+@main.command("execution_delete")
+@click.option('--password', prompt=True, hide_input=True)
+@click.argument("executions", nargs=-1)
+def delete_executions(password, executions):
+    key = password.encode()
+    for execution in executions:
+        signature = signatures.new_signature(
+            key,
+            "DELETE",
+            f"/executions/{execution}")
+        auth_content = signatures.new_authorization_header(
+            "Client",
+            signature)
+        try:
+            resp = requests.delete(
+                f"{C2_URL}/executions/{execution}",
+                headers={'Authorization': auth_content})
+        except requests.exceptions.ConnectionError:
+            print("Connection refused.")
+        else:
+            if resp.status_code in {401, 404}:
                 print(resp.json()['error'])
             elif resp.status_code != 204:
                 print("Unexpected response from Command and Control Sever.")
@@ -229,27 +377,27 @@ def uninstall(password, ip, port, packages):
             elif resp.status_code != 204:
                 print("Unexpected response from Command and Control Sever.")
 
-@main.command("execute_tests")
+@main.command("reports_get")
 @click.argument("ip")
 @click.argument("port")
 @click.option("--package", "-p", multiple=True)
 @click.option("--module", "-m", multiple=True)
 @click.option("--test_set", "-t", multiple=True)
-def execute_tests(ip, port, package, module, test_set):
+def get_reports(ip, port, package, module, test_set):
     query = ""
     if package:
-        query += f"&packages={','.join(package)}"
+        query = f"{query}&packages={','.join(package)}"
     if module:
-        query += f"&modules={','.join(module)}"
+        query = f"{query}&modules={','.join(module)}"
     if test_set:
-        query += f"&test_sets={','.join(test_set)}"
+        query = f"{query}&test_sets={','.join(test_set)}"
     query = query.replace("&", "?", 1)
 
     try:
         resp = requests.get(
             f"{C2_URL}/environments/{ip}/{port}/reports{query}")
     except requests.exceptions.ConnectionError:
-            print("Connection refused.")
+        print("Connection refused.")
     else:
         if resp.status_code == 200:
             print(json.dumps(resp.json(), indent=2))

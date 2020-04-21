@@ -15,12 +15,19 @@ from custom_collections import OrderedListOfDict
 from flask import abort, Flask, g, jsonify, request, Response
 from flask_cors import CORS
 from hashlib import sha256
+from typing import Optional
 
 
-def client_key_recoverer(key_id):
+def client_key_recoverer(key_id) -> Optional[bytes]:
+    """The key recoverer for client oriented endpoints. Only the ID 'Client' is
+    allowed."""
+
     return config['CLIENT_SECRET'] if key_id == "Client" else None
 
-def node_key_recoverer(key_id):
+def node_key_recoverer(key_id) -> Optional[bytes]:
+    """The key recoverer for node oriented endpoints. Only the ID 'Node' is
+    allowed."""
+
     return config['NODE_SECRET'] if key_id == "Node" else None
 
 
@@ -494,7 +501,7 @@ def execute_tests(ip, port):
     return jsonify(resp.json())
 
 @app.route("/executions", methods=["GET"])
-def get_executions():
+def search_executions():
     db = get_database()
 
     if not request.args:
@@ -510,8 +517,8 @@ def get_executions():
                     'registered': 'timestamp_registered',
                 },
                 where_api_to_db={
-                    'id': ("id_execution", "="),
-                    'session': ("fk_session", "="),
+                    'ids': ("id_execution", "="),
+                    'sessions': ("fk_session", "="),
                     'registered_from': ("timestamp_registered", ">="),
                     'registered_to': ("timestamp_registered", "<="),
                 },
@@ -598,14 +605,14 @@ def search_sessions():
                     'system': "env_os_system"
                 },
                 where_api_to_db={
-                    'id': ("id_session", "="),
+                    'ids': ("id_session", "="),
                     'start_from': ("session_start", ">="),
                     'start_to': ("session_start", "<="),
                     'end_from': ("session_end", ">="),
                     'end_to': ("session_end", "<="),
-                    'ip': ("env_ip", "="),
-                    'port': ("env_ports", "="),
-                    'system': ("env_os_system", "="),
+                    'ips': ("env_ip", "="),
+                    'ports': ("env_port", "="),
+                    'systems': ("env_os_system", "="),
                 },
                 parameters=request.args,
                 select_columns=(

@@ -504,7 +504,7 @@ paths:
       summary: Searches for executions that match the given criteria.
       parameters:
         - in: query
-          name: id
+          name: ids
           required: false
           schema:
             type: array
@@ -521,7 +521,7 @@ paths:
               value: [1, 2, 3]
               summary: A given list of ids
         - in: query
-          name: session
+          name: sessions
           required: false
           schema:
             type: array
@@ -642,7 +642,7 @@ paths:
       summary: Searches for sessions that match the given criteria.
       parameters:
         - in: query
-          name: id
+          name: ids
           required: false
           schema:
             type: array
@@ -701,7 +701,7 @@ paths:
           allowReserved: true
           example: 2020-04-04T04:04:04Z
         - in: query
-          name: ip
+          name: ips
           required: false
           schema:
             type: array
@@ -719,7 +719,7 @@ paths:
               value: [192.168.0.8, 192.168.0.2, 192.168.0.4]
               description: A list of IPs separated by commas
         - in: query
-          name: port
+          name: ports
           required: false
           schema:
             type: array
@@ -736,7 +736,7 @@ paths:
               value: [4000, 5000, 6000]
               description: A list of ports separated by commas
         - in: query
-          name: system
+          name: systems
           required: false
           schema:
             type: array
