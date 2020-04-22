@@ -2,6 +2,7 @@ import hmac
 import json
 import platform
 import os
+import re
 import requests as rq
 import signal
 import signatures
@@ -92,11 +93,14 @@ def execute_tests():
             modules = params.get('modules', [], split_parameter)
             test_sets = params.get('test_sets', [], split_parameter)
 
-        tests = test_utils.TestSetCollection(
-            "test_sets",
-            packages,
-            modules,
-            test_sets)
+        try:
+            tests = test_utils.TestSetCollection(
+                "test_sets",
+                packages,
+                modules,
+                test_sets)
+        except ModuleNotFoundError:
+            abort(404, description="A specified entity was not found")
     
     return jsonify(tests.run_all_tests())
 

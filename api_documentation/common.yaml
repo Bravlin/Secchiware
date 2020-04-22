@@ -7,6 +7,8 @@ components:
           type: string
       required:
         - error
+      example:
+        error: Details of the error
     TestsPackageInfo:
       type: object
       properties:

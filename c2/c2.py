@@ -470,6 +470,10 @@ def execute_tests(ip, port):
     if resp.status_code == 400:
         abort(500,
             description="Something went wrong when handling the request")
+    if resp.status_code == 404:
+        abort(
+            404,
+            description="A specified entity does not exist in the node.")
     if resp.status_code != 200:
         abort(502, description=f"Unexpected response from node at {ip}:{port}")
 
