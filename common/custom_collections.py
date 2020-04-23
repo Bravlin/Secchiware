@@ -1,12 +1,47 @@
 from typing import Any, Callable, List
 
 class OrderedListOfDict():
+    """
+    A wrapper that keeps a list of dictionaries ordered by a specific key that
+    must be present in all of them. Also, the values associated to that key
+    must all be of the same type.
+
+    Attributes
+    ----------
+    content: List[dict]
+        The list wrapped by a instance of this class. It should not be
+        directly manipulated. You can set this attribute with a list of
+        dictionaries that fulfills the instance conditions for the sorting key
+        and its value.
+        
+    Methods
+    -------
+    index_of(key_value: Any) -> int
+        Looks for the index of the element associated to the given key.
+    insert(d: dict) -> None
+        Inserts (or updates) d in the collection.
+    batch_insert(values: List[dict]) -> None:
+        Inserts (or updates) the elements present in the argument.
+    delete(self, key_value: Any) -> None:
+        Removes the element associated to the given key from the collection.
+    """
 
     def __init__(
             self,
             sort_key: Any,
             sort_key_value_type: Callable,
             values: List[dict] = []):
+        """
+        Parameters
+        ----------
+        sort_key: Any
+            The key associated to the values used to sort the collection.
+        sort_key_value_type: Callable
+            The type of the values used to sort the collection.
+        values: List[dict], optional
+            A list of dictionaries used to initialize the instance. If it is
+            not given, the instance is initialized with an empty list.
+        """
         self._sort_key: Any = sort_key
         self._skvt: Callable = sort_key_value_type
         if values:
@@ -23,11 +58,16 @@ class OrderedListOfDict():
         key = self._sort_key
         for d in value:
             if not isinstance(d, dict):
-                raise TypeError("Found member in argument which is not a dictionary.")
+                raise TypeError(
+                    "Found member in argument which is not a dictionary.")
             if not key in d:
-                raise ValueError("The sort key is not present in one of the members of the argument.")
+                raise ValueError(
+                    "The sort key is not present in one of the members of "
+                    "the argument.")
             if not isinstance(d[key], self._skvt):
-                raise TypeError("The type of the value corresponding to the sort key is not correct in one of the members.")
+                raise TypeError(
+                    "The type of the value corresponding to the sort key is "
+                    "not correct in one of the members.")
         self._ordered_list = sorted(value, key=lambda x : x[key])
 
     def index_of(self, key_value: Any) -> int:
@@ -95,7 +135,9 @@ class OrderedListOfDict():
         if not key in d:
             raise ValueError("The sort key is not present in the argument.")
         if not isinstance(d[key], self._skvt):
-            raise TypeError("The type of the value corresponding to the sort key is not correct.")
+            raise TypeError(
+                "The type of the value corresponding to the sort key is not "
+                "correct.")
 
         ol = self._ordered_list
         # Binary search.
@@ -114,21 +156,36 @@ class OrderedListOfDict():
             ol[middle] = d # Updates if there was a match.
 
     def batch_insert(self, values: List[dict]) -> None:
+        """Inserts (or updates) the elements present in the argument.
+        It ignores any incompatible members.
+
+        Parameters
+        ----------
+        values: List[dict]
+            A list containing the elements to insert or update in the
+            collection.
+        """
+
         key = self._sort_key
         appended = False
+
         for d in values:
             if not isinstance(d, dict):
                 print("Found member in argument which is not a dictionary.")
             elif not key in d:
-                print("The sort key is not present in one of the members of the argument.")
+                print(
+                    "The sort key is not present in one of the members of "
+                    "the argument.")
             else:
                 try:
                     index = self.index_of(d[key])
                 except TypeError:
-                    print("The type of the value corresponding to the sort key is not correct in one of the members.")
+                    print("The type of the value corresponding to the sort "
+                        "key is not correct in one of the members.")
                 else:
                     if index >= 0:
-                        self._ordered_list[index] = d # Updates if there was no match.
+                        # Updates if there was no match.
+                        self._ordered_list[index] = d
                     else:
                         # Appends if there was a match.
                         self._ordered_list.append(d)

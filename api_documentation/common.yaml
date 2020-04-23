@@ -99,9 +99,9 @@ components:
       description: > 
         Format: SECCHIWARE-HMAC-256 keyId={keyId},[headers={headers}],signature={signature}
         Parameters:
-          keyId: a opaque string identifier that helps the server find the necessary credentials to validate the signature.
-          headers: An ordered list of the names in lowercase of the headers whose values where used to generate the signature, separated by semicolons (';').
-          signature: a base 64 encoded string of the HMAC-SHA256 hash generated with the necessary credentials following the algorithm explained next.
+          keyId: an opaque string identifier that helps the server find the necessary credentials to validate the signature.
+          headers: an arbitrarily ordered list of the names in lowercase of the headers whose values weere used to generate the signature, separated by semicolons (';').
+          signature: a base 64 encoded string of the HMAC-SHA256 digest generated with the necessary credentials following the algorithm explained next.
         Algorithm:
           1- Create an empty string.
           2- Append the method of the request in lowercase followed by a newline character ('\n').
@@ -110,4 +110,4 @@ components:
           5- For every header specified, append the following expression: "{header_name}: {header_value}\n",
             where header_name is the key of the header in lowercase and header_value is its corresponding value.
             For the last header the trailing newline character MUST be omitted.
-          6- Calculate the HMAC-SHA256 hash of the generated string and base 64 encode it to obtain the signature.
+          6- Calculate the HMAC-SHA256 digest of the generated string and base 64 encode it to obtain the signature.
