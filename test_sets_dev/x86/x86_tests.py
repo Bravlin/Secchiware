@@ -1,7 +1,7 @@
 import ctypes
 import os
 
-from test_utils import TestResult, TestSet, test
+from test_utils import TestResult, TestSet
 
 
 class X86VirtualizationSet(TestSet):
@@ -11,10 +11,10 @@ class X86VirtualizationSet(TestSet):
         shared_bin_dir = os.path.join(package_dir, "shared", "bin")
         self.dll = ctypes.CDLL(os.path.join(shared_bin_dir, "x86_shared.so"))
 
-    @test(
+    @TestSet.test(
         name="Is CPUID hypervisor bit on?",
         description=
-            "Calls the x86 instruction CPUID and checks the value of the ECX "\
+            "Calls the x86 instruction CPUID and checks the value of the ECX "
             "register's 31th bit.")
     def cpuid_hypervisor_bit_on(self) -> TestResult:
         return self.dll.CPUID_HypervisorBitTest()

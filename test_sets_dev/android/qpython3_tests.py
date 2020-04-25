@@ -1,4 +1,4 @@
-from test_utils import TestResult, TestSet, test
+from test_utils import TestResult, TestSet
 from time import sleep
 
 
@@ -9,7 +9,7 @@ class QPython3CommunicationSet(TestSet):
         from androidhelper import Android
         self.droid = Android()
 
-    @test(
+    @TestSet.test(
         name="How many contacts are registered?",
         description="Looks for at least 5 registered contacts.")
     def contacts_registered(self) -> TestResult:
@@ -20,7 +20,7 @@ class QPython3CommunicationSet(TestSet):
         result = TestSet.TEST_PASSED if count >= 5 else TestSet.TEST_FAILED
         return result, additional_info
 
-    @test(
+    @TestSet.test(
         name="How many SMS are stored?",
         description="Looks for at least 10 stored messages.")
     def sms_stored(self) -> TestResult:
@@ -31,7 +31,7 @@ class QPython3CommunicationSet(TestSet):
         result = TestSet.TEST_PASSED if count >= 5 else TestSet.TEST_FAILED
         return result, additional_info
         
-    @test(
+    @TestSet.test(
         name="Is the phone participating in calls?",
         description="Waits for a phone call during 10 seconds.")
     def detect_call(self) -> TestResult:
@@ -55,7 +55,7 @@ class QPython3EmulatorSet(TestSet):
         from androidhelper import Android
         self.droid = Android()
 
-    @test(
+    @TestSet.test(
         name="Does the IMEI correspond to an emulator?",
         description="Checks the device's IMEI against '000000000000000'.")
     def imei_from_emulator(self) -> TestResult:
@@ -63,7 +63,7 @@ class QPython3EmulatorSet(TestSet):
             return TestSet.TEST_FAILED
         return TestSet.TEST_PASSED
 
-    @test(
+    @TestSet.test(
         name="Does the network operator name correspond to an emulator?",
         description=
             "Checks the device's network operator's name against'Android'.")
@@ -76,7 +76,7 @@ class QPython3EmulatorSet(TestSet):
             return TestSet.TEST_FAILED, additional_info
         return TestSet.TEST_PASSED, additional_info
 
-    @test(
+    @TestSet.test(
         name="Does the device have a bluetooth adapter?",
         description="Looks for a not null local bluetooth address.")
     def has_bluetooth(self) -> TestResult:
@@ -93,7 +93,7 @@ class QPython3HumanUseSet(TestSet):
         from androidhelper import Android
         self.droid = Android()
 
-    @test(
+    @TestSet.test(
         name="Is WhatsApp installed?",
         description="Verifies that WhatsApp is a launchable application.")
     def whatsapp_installed(self) -> TestResult:
@@ -102,7 +102,7 @@ class QPython3HumanUseSet(TestSet):
             return TestSet.TEST_PASSED
         return TestSet.TEST_FAILED
 
-    @test(
+    @TestSet.test(
         name="Does the clipboard have content?",
         description="Checks wheter the clipboard is empty or not.")
     def clipboard_has_content(self) -> TestResult:

@@ -1,11 +1,11 @@
 import os
 
-from test_utils import TestResult, TestSet, test
+from test_utils import TestResult, TestSet
 
 
 class SystemdSet(TestSet):
 
-    @test(
+    @TestSet.test(
         name="Looks for virtualization with systemd",
         description="Executes systemd-detect-virt and examines the result.")
     def systemd_detect_virt_test(self) -> TestResult:

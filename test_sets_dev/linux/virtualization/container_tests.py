@@ -1,15 +1,15 @@
 import os
 import re
 
-from test_utils import TestResult, TestSet, test
+from test_utils import TestResult, TestSet
 
 
 class ContainerSet(TestSet):
 
-    @test(
+    @TestSet.test(
         name="Read kallsyms",
         description=
-            "Verifies that if the user is root, then addresses in "\
+            "Verifies that if the user is root, then addresses in "
             "'/proc/kallsyms' should all not be 0.")
     def read_kallsyms(self) -> TestResult:
         process = os.popen("whoami")
@@ -31,10 +31,10 @@ class ContainerSet(TestSet):
                     return TestSet.TEST_PASSED
         return TestSet.TEST_FAILED
 
-    @test(
+    @TestSet.test(
         name="Is the first process an init?",
         description=
-            "Verifies that the name of the process with PID 1 corresponds to"\
+            "Verifies that the name of the process with PID 1 corresponds to "
             "a well known init.")
     def is_first_process_an_init(self) -> TestSet:
         known_inits = {"systemd", "upstart", "sysv-init"}
@@ -52,7 +52,7 @@ class ContainerSet(TestSet):
 
 class DockerSet(TestSet):
 
-    @test(
+    @TestSet.test(
         name="Is '.dockerenv' present?",
         description="Looks for a file named .dockerenv in directory '/'.")
     def dockerenv_present(self) -> TestResult:
@@ -60,10 +60,11 @@ class DockerSet(TestSet):
             return TestSet.TEST_FAILED
         return TestSet.TEST_PASSED
 
-    @test(
+    @TestSet.test(
         name="Does the host contain an IP typical for Docker?",
         description=
-            "Looks for IPs like '172.17.x.x' using the command 'ip addr show'.")
+            "Looks for IPs like '172.17.x.x' using the command "
+            "'ip addr show'.")
     def docker_like_ip(self) -> TestResult:
         process = os.popen("ip addr show")
         for line in process:

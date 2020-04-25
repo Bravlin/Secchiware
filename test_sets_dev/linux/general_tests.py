@@ -1,11 +1,11 @@
 import os
 
-from test_utils import TestResult, TestSet, test
+from test_utils import TestResult, TestSet
 
 
 class MonitoringSet(TestSet):
 
-    @test(
+    @TestSet.test(
         name="Is tracer attached?",
         description="Looks for a TracerPid different than 0.")
     def is_tracer_attached(self) -> TestResult:
@@ -19,7 +19,7 @@ class MonitoringSet(TestSet):
         result = TestSet.TEST_PASSED if pid == 0 else TestSet.TEST_FAILED
         return result, additional_info
 
-    @test(
+    @TestSet.test(
         name="Is Wireshark running?",
         description="Looks for a process named 'wireshark'.")
     def wireshark_running(self) -> TestResult:
@@ -37,10 +37,10 @@ class MonitoringSet(TestSet):
 
 class HooksAndInjectedLibrariesSet(TestSet):
 
-    @test(
+    @TestSet.test(
         name="Is LD_PRELOAD present?",
         description=
-            "Checks if the process was started with the LD_PRELOAD "\
+            "Checks if the process was started with the LD_PRELOAD "
             "environment variable")
     def ld_preload_present(self) -> TestResult:
         if 'LD_PRELOAD' in os.environ:
@@ -53,10 +53,10 @@ class HooksAndInjectedLibrariesSet(TestSet):
 
 class NetworkingSet(TestSet):
 
-    @test(
+    @TestSet.test(
         name="Are cached SSIDs present?",
         description=
-            "Looks for a file in "\
+            "Looks for a file in "
             "'/etc/NetworkManager/system-connections/'.")
     def ssids_present(self) -> TestResult:
         path = "/etc/NetworkManager/system-connections/"
@@ -71,7 +71,7 @@ class NetworkingSet(TestSet):
 
 class HardwareSet(TestSet):
 
-    @test(
+    @TestSet.test(
         name="Are there at least 2 CPU cores?",
         description="Checks how many cores the processor has through nproc.")
     def at_least_two_cores(self) -> TestResult:

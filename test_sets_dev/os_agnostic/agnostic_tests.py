@@ -4,15 +4,15 @@ import statistics
 
 from concurrent.futures import ThreadPoolExecutor
 from hashlib import sha256
-from test_utils import TestResult, TestSet, test
+from test_utils import TestResult, TestSet
 
 
 class AgnosticNetworkingSet(TestSet):
 
-    @test(
+    @TestSet.test(
         name="Are fake domains resolved?",
         description=
-            "Verifies wheter the fake domain 'secchiware.fake.com' gets "\
+            "Verifies wheter the fake domain 'secchiware.fake.com' gets "
             "resolved.")
     def are_fake_domains_resolved(self) -> TestResult:
         try:
@@ -24,12 +24,12 @@ class AgnosticNetworkingSet(TestSet):
 
 class AgnosticAntiAnalysisSet(TestSet):
 
-    @test(
+    @TestSet.test(
         name="Is sleep simulated?",
         description=
-            "Runs two threads: one sleeps and the other does some timewasting. "\
-            "If the sleeping thread finishes first, then the system is "\
-            "simulating sleep.")
+            "Runs two threads: one sleeps and the other does some "
+            "timewasting. If the sleeping thread finishes first, then the "
+            "system is simulating sleep.")
     def sleep_emulated(self) -> TestResult:
         def sleeper():
             time.sleep(3)
@@ -50,20 +50,20 @@ class AgnosticAntiAnalysisSet(TestSet):
             return TestSet.TEST_PASSED
         return TestSet.TEST_FAILED
 
-    @test(
+    @TestSet.test(
         name="Does execution time vary greatly?",
         description=
-            "Calculates 100 times the digest of a certain long phrase. If the "\
+            "Calculates 100 times the digest of a certain long phrase. If the "
             "coefficient of variation exceeds 0.8, then the test fails.")
     def timing_test(self) -> TestResult:
-        phrase = b"Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed "\
-            b"do eiusmod tempor incididunt ut labore et dolore magna aliqua. "\
-            b"Ut enim ad minim veniam, quis nostrud exercitation ullamco "\
-            b"laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure "\
-            b"dolor in reprehenderit in voluptate velit esse cillum dolore eu "\
-            b"fugiat nulla pariatur. Excepteur sint occaecat cupidatat non "\
-            b"proident, sunt in culpa qui officia deserunt mollit anim id est "\
-            b"laborum."
+        phrase = (b"Lorem ipsum dolor sit amet, consectetur adipiscing elit, "
+            b"sed do eiusmod tempor incididunt ut labore et dolore magna "
+            b"aliqua. Ut enim ad minim veniam, quis nostrud exercitation "
+            b"ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis "
+            b"aute irure dolor in reprehenderit in voluptate velit esse "
+            b"cillum dolore eu  fugiat nulla pariatur. Excepteur sint "
+            b"occaecat cupidatat non proident, sunt in culpa qui officia "
+            b"deserunt mollit anim id est laborum.")
         execution_times = []
         for _ in range(100):
             start_time = time.process_time()

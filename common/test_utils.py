@@ -26,97 +26,6 @@ class InvalidTestMethod(Exception):
     pass
 
 
-############################ Test facilities #################################
-
-def test(name: str, description: str) -> Callable:
-    """Decorator that marks the given method as a test.
-    
-    It forces the decorated method to return just an int representing the
-    result code of the test execution or an additional dictionary containing
-    any extra information that the developer wishes to provide. Also, the
-    following dictionary structure is now returned by the method:
-
-    'test_name': a string filled with the given name parameter.
-    
-    'test_description': a string filled with the given description parameter.
-
-    'result_code': a number that represents the success (> 0), failure (< 0)
-    or unexpected condition (0) after the test execution.
-
-    'additional_info': an optional dictionary containing extra relevant data.
-
-    Parameters
-    ----------
-    name: str
-        The name given to the test.
-    description: str
-        A brief explanation of the test.
-
-    Returns
-    -------
-    Callable[[TestSet], dict]
-        The decorated method.
-    """
-
-    def test_decorator(
-            method: Callable) -> Callable:
-        @wraps(method)
-        def wrapper(self) -> Callable:
-            report = {}
-            report['timestamp_start'] = (datetime.utcnow()
-                .strftime('%Y-%m-%dT%H:%M:%S.%fZ'))
-            result = method(self)
-            report['timestamp_end'] = (datetime.utcnow()
-                .strftime('%Y-%m-%dT%H:%M:%S.%fZ'))
-
-            if isinstance(result, int):
-                report['result_code'] = result
-            elif not isinstance(result, tuple):
-                raise InvalidTestMethod("Invalid return type.")
-            elif len(result) != 2:
-                raise InvalidTestMethod("Incorrect number of return values.")
-            elif not isinstance(result[0], int):
-                raise InvalidTestMethod("Result code is not an integer.")
-            elif not isinstance(result[1], dict):
-                raise InvalidTestMethod(
-                    "Second return value is not a dictionary.")
-            else:
-                report['result_code'] = result[0]
-                report['additional_info'] = result[1]
-
-            report['test_name'] = name
-            report['test_description'] = description
-            return report
-
-        wrapper.test = True
-        return wrapper
-    
-    return test_decorator
-
-def is_test(x: Any) -> bool:
-    """
-    Its use is recommended when inspecting a class definition, as there is no
-    instance bound to the method.
-
-    Returns
-    -------
-    bool
-        Wheter the argument is a test method.
-    """
-
-    return inspect.isfunction(x) and hasattr(x, 'test')
-
-def is_test_method(x: Any) -> bool:
-    """
-    Returns
-    -------
-    bool 
-        Wheter the argument is a test in the form a method bound to an object.
-    """
-
-    return inspect.ismethod(x) and hasattr(x, 'test')
-
-
 ######################### Classes to contain tests ###########################
 
 class TestSet(ABC):
@@ -135,6 +44,13 @@ class TestSet(ABC):
     
     Static methods
     --------------
+    test(name: str, description: str)
+        Decorator that marks a method as a test.
+    is_test(x: Any) -> bool
+        Wheter the argument is a test method (used to analyze a class
+        definition).
+    is_test_method(x: Any) -> bool
+        Wheter the argument is a test in the form a method bound to an object.
     is_strict_subclass(x: Any) -> bool
         Wheter the argument is a subclass of TestSet but not TestSet itself.
 
@@ -148,6 +64,96 @@ class TestSet(ABC):
     TEST_PASSED = 1
     TEST_FAILED = -1
     TEST_INCONCLUSIVE = 0
+
+    @staticmethod
+    def test(name: str, description: str):
+        """Decorator that marks a method as a test.
+        
+        It forces the decorated method to return just an int representing the
+        result code of the test execution or an additional dictionary
+        containing any extra information that the developer wishes to provide.
+        Also, the following dictionary structure is now returned by the
+        method:
+
+        'test_name': a string filled with the given name parameter.
+        
+        'test_description': a string filled with the given description
+        parameter.
+
+        'result_code': a number that represents the success (> 0), failure
+        (< 0) or unexpected condition (0) after the test execution.
+
+        'additional_info': an optional dictionary containing extra relevant
+        data.
+
+        Parameters
+        ----------
+        name: str
+            The name given to the test.
+        description: str
+            A brief explanation of the test.
+        """
+
+        def test_decorator(method: Callable[[TestSet], TestResult])\
+        -> Callable[[TestSet], dict]:
+            @wraps(method)
+            def wrapper(self: TestSet) -> dict:
+                report = {}
+                report['timestamp_start'] = (datetime.utcnow()
+                    .strftime('%Y-%m-%dT%H:%M:%S.%fZ'))
+                result = method(self)
+                report['timestamp_end'] = (datetime.utcnow()
+                    .strftime('%Y-%m-%dT%H:%M:%S.%fZ'))
+
+                if isinstance(result, int):
+                    report['result_code'] = result
+                elif not isinstance(result, tuple):
+                    raise InvalidTestMethod("Invalid return type.")
+                elif len(result) != 2:
+                    raise InvalidTestMethod(
+                        "Incorrect number of return values.")
+                elif not isinstance(result[0], int):
+                    raise InvalidTestMethod("Result code is not an integer.")
+                elif not isinstance(result[1], dict):
+                    raise InvalidTestMethod(
+                        "Second return value is not a dictionary.")
+                else:
+                    report['result_code'] = result[0]
+                    report['additional_info'] = result[1]
+
+                report['test_name'] = name
+                report['test_description'] = description
+                return report
+
+            wrapper.test = True
+            return wrapper
+        
+        return test_decorator
+
+    @staticmethod
+    def is_test(x: Any) -> bool:
+        """
+        Its use is recommended when inspecting a class definition, as there is no
+        instance bound to the method.
+
+        Returns
+        -------
+        bool
+            Wheter the argument is a test method.
+        """
+
+        return inspect.isfunction(x) and hasattr(x, 'test')
+
+    @staticmethod
+    def is_test_method(x: Any) -> bool:
+        """
+        Returns
+        -------
+        bool 
+            Wheter the argument is a test in the form a method bound to an object.
+        """
+
+        return inspect.ismethod(x) and hasattr(x, 'test')
 
     @staticmethod
     def is_strict_subclass(x: Any) -> bool:
@@ -171,11 +177,11 @@ class TestSet(ABC):
         List[dict]
             A list containing the individual reports generated by each test.
             The structure of a report is documented in the test decorator.
-            Any given test method found that is not 
+            Any given test method found that is not valid is ignored.
         """
 
         reports = []
-        tests = inspect.getmembers(self, is_test_method)
+        tests = inspect.getmembers(self, TestSet.is_test_method)
         for _, method in tests:
             try:
                 reports.append(method())
@@ -418,7 +424,7 @@ def get_installed_package(package_name: str) -> dict:
                 }
 
                 tests_list = []
-                tests = inspect.getmembers(c, is_test)
+                tests = inspect.getmembers(c, TestSet.is_test)
                 for test_name, _ in tests:
                     tests_list.append(test_name)
                 

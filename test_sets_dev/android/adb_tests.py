@@ -1,11 +1,11 @@
 import os
 
-from test_utils import TestResult, TestSet, test
+from test_utils import TestResult, TestSet
 
 
 class ADBEmulatorSet(TestSet):
 
-    @test(
+    @TestSet.test(
         name="Does the brand correspond to an emulator?",
         description="Verifies the brand property against 'generic'.")
     def brand_from_emulator(self) -> TestResult:
@@ -20,7 +20,7 @@ class ADBEmulatorSet(TestSet):
             return TestSet.TEST_FAILED
         return TestSet.TEST_PASSED
 
-    @test(
+    @TestSet.test(
         name="Does the manufacturer correspond to an emulator?",
         description="Verifies the manufacturer property against 'unknown'.")
     def manufacturer_from_emulator(self) -> TestResult:
