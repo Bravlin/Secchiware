@@ -6,16 +6,16 @@ class OrderedListOfDict():
     must be present in all of them. Also, the values associated to that key
     must all be of the same type.
 
-    Attributes
-    ----------
+    Instance attributes
+    -------------------
     content: List[dict]
         The list wrapped by a instance of this class. It should not be
         directly manipulated. You can set this attribute with a list of
         dictionaries that fulfills the instance conditions for the sorting key
         and its value.
         
-    Methods
-    -------
+    Instance methods
+    ----------------
     index_of(key_value: Any) -> int
         Looks for the index of the element associated to the given key.
     insert(d: dict) -> None
@@ -42,6 +42,7 @@ class OrderedListOfDict():
             A list of dictionaries used to initialize the instance. If it is
             not given, the instance is initialized with an empty list.
         """
+
         self._sort_key: Any = sort_key
         self._skvt: Callable = sort_key_value_type
         if values:

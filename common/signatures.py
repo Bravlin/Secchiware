@@ -1,7 +1,27 @@
+"""A module containing some functions to help working with the scheme
+SECCHIWARE-HMAC-256 for HTTP requests authentication.
+
+Functions
+---------
+new_signature(key: bytes, method: str, canonical_URI: str, query: str,
+signature_headers: List[str],
+header_recoverer: Callable[[str], Any]) -> str
+    Creates a new signature.
+new_authorization_header(key_id: str, signature: str,
+signature_headers: List[str]) -> str
+    Generates the value of an Authorization HTTP header.
+verify_authorization_header(authorization_header: str,
+key_recoverer: Callable[[str], Optional[bytes]], header_recoverer: Callable,
+method: str, canonical_URI: str, query: str,
+mandatory_headers: List[str]) -> bool:
+    Verifies the validity of the authorization header value provided.
+"""
+
+
 import hmac
 
 from base64 import b64encode
-from typing import Any, Callable, List
+from typing import Any, Callable, List, Optional
 from urllib import parse
 
 
@@ -34,15 +54,15 @@ def new_signature(
     key: bytes
         The key used to generate the signature.
     method: str
-        The method of the HTTP request to sign. It gets converted to lowercase.
+        The method of the HTTP request to sign. The case does not matter.
     canonicar_URI: str
         The path from host of the request without a query string.
     query: str, optional
         The query part of the request (the string after "?").
     signature_headers: List[str], optional
         A list with the keys of the headers to include in the signature, if
-        any.
-    header_recoverer: Callable, optional
+        any. The case is irrelevant.
+    header_recoverer: Callable[[str], Any], optional
         If signature_headers is given, a function that recieves a header key
         and returns its corresponding value must be provided.
 
@@ -119,19 +139,57 @@ def new_authorization_header(
     authorization_header = f"SECCHIWARE-HMAC-256 keyId={key_id},"
     if signature_headers:
         signed_headers = ";".join(h.lower() for h in signature_headers)
-        authorization_header = f"{authorization_header}headers={signed_headers},"
+        authorization_header = (
+            f"{authorization_header}headers={signed_headers},")
 
     authorization_header = f"{authorization_header}signature={signature}"
     return authorization_header
 
 def verify_authorization_header(
         authorization_header: str,
-        key_recoverer: Callable,
+        key_recoverer: Callable[[str], Optional[bytes]],
         header_recoverer: Callable,
         method: str,
         canonical_URI: str,
         query: str = "",
         mandatory_headers: List[str] = []) -> bool:
+    """Verifies the validity of the authorization header value provided.
+
+    Parameters
+    ----------
+    authorization_header: str
+        Is the content of the authorization header of an incoming request.
+    key_recoverer: Callable[[str], Optional[bytes]]
+        A function that given a keyId, it returns its corresponding key in
+        bytes or None if there is no key associated.
+    header_recoverer: Callable[[str], Any]
+        A function that recieves a header key and returns its corresponding
+        from the incoming request.
+    method: str
+        The HTTP method of the incoming request. The case does not matter.
+    canonical_URI: str
+        The path from host of the incoming request without a query string.
+    query: str, optional
+        The query part of the incoming request (the string after "?"), if any.
+    mandatory_headers: List[str], optional
+        A list of mandatory headers that a server can impose for the endpoint
+        from which this function is called and that must be specified in the
+        incoming request authorization header. The order of the list is not
+        relevant and neither is the case employed.
+
+    Raises
+    ------
+    ValueError
+        The provided authorization header does not follow the scheme
+        SECCHIWARE-HMAC-256 or a mandatory header was specified but is not
+        present in the incoming request.
+
+    Returns
+    -------
+    bool
+        Wheter the signature corresponds to the parameters present in the
+        authorization header or not.
+    """
     if not authorization_header.startswith("SECCHIWARE-HMAC-256"):
         raise ValueError("Invalid signature algorithm.")
 
@@ -154,10 +212,11 @@ def verify_authorization_header(
     else:
         final_param = 2
         signature_headers = parameters[1].split("=", 1)[1].split(";")
-        not_present = {h.lower() for h in mandatory_headers}\
-            - {*signature_headers}
+        not_present = ({h.lower() for h in mandatory_headers}
+            - {*signature_headers})
         if not_present:
-            raise ValueError(f"Mandatory header/s not specified: {','.join(not_present)}")
+            raise ValueError(
+                f"Mandatory header/s not specified: {','.join(not_present)}")
         try:
             # Can raise ValueError or KeyError
             signature = new_signature(
