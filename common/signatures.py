@@ -13,7 +13,7 @@ signature_headers: List[str]) -> str
 verify_authorization_header(authorization_header: str,
 key_recoverer: Callable[[str], Optional[bytes]], header_recoverer: Callable,
 method: str, canonical_URI: str, query: str,
-mandatory_headers: List[str]) -> bool:
+mandatory_headers: List[str]) -> bool
     Verifies the validity of the authorization header value provided.
 """
 

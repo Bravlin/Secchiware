@@ -20,9 +20,9 @@ class OrderedListOfDict():
         Looks for the index of the element associated to the given key.
     insert(d: dict) -> None
         Inserts (or updates) d in the collection.
-    batch_insert(values: List[dict]) -> None:
+    batch_insert(values: List[dict]) -> None
         Inserts (or updates) the elements present in the argument.
-    delete(self, key_value: Any) -> None:
+    delete(self, key_value: Any) -> None
         Removes the element associated to the given key from the collection.
     """
 
