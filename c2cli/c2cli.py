@@ -8,16 +8,25 @@ from base64 import b64encode
 from hashlib import sha256
 from typing import List
 
+
 @click.group()
-@click.option("--c2-url", "-u", default="http://127.0.0.1:5000",
+@click.option(
+    "--c2-url",
+    "-u",
+    type=str,
+    default="http://127.0.0.1:5000",
+    show_default=True,
     help="URL of the Command and Control server.")
-def main(c2_url):
+def main(c2_url: str):
     global C2_URL
     C2_URL = c2_url
 
-@main.command("lsavailable")
+@main.command(
+    "lsavailable",
+    short_help="Lists the test sets available at the C&C server.")
 def lsavialable():
     """Lists the test sets available at the C&C server."""
+
     try:
         resp = requests.get(f"{C2_URL}/test_sets")
     except requests.exceptions.ConnectionError:
@@ -28,13 +37,22 @@ def lsavialable():
         else:
             print("Unexpected response from Command and Control Sever.")
 
-@main.command("upload")
-@click.option('--password', prompt=True, hide_input=True)
-@click.argument("file_path")
-def upload_compressed_packages(password: str, file_path: str):
-    if not os.path.isfile(file_path):
-        print("Given path does not exists or is not a file.")
-    elif not file_path.endswith(".tar.gz"):
+@main.command(
+    "upload",
+    short_help="Uploads a tar.gz file full of packages to the C&C server.")
+@click.option(
+    "--password",
+    type=str,
+    help=
+        "Key to authenticate with the C&C server as a client. If omitted, it "
+        "will be prompted.",
+    prompt=True,
+    hide_input=True)
+@click.argument("file_path", type=click.Path(exists=True))
+def upload_compressed_packages(password: str, file_path: click.Path):
+    """Uploads a tar.gz file full of packages to the C&C server."""
+
+    if not file_path.endswith(".tar.gz"):
         print("Only .tar.gz extension allowed.")
     else:
         with open(file_path, "rb") as f:
@@ -53,8 +71,8 @@ def upload_compressed_packages(password: str, file_path: str):
             "/test_sets",
             signature_headers=headers,
             header_recoverer=lambda h: prepared.headers.get(h))
-        prepared.headers['Authorization'] =\
-            signatures.new_authorization_header("Client", signature, headers)
+        prepared.headers['Authorization'] = (
+            signatures.new_authorization_header("Client", signature, headers))
 
         try:
             resp = requests.Session().send(prepared)
@@ -67,9 +85,18 @@ def upload_compressed_packages(password: str, file_path: str):
                 print("Unexpected response from Command and Control Sever.")
 
 @main.command("remove")
-@click.option('--password', prompt=True, hide_input=True)
+@click.option(
+    "--password",
+    help=
+        "Key to authenticate with the C&C server as a client. If omitted, it "
+        "will be prompted.",
+    prompt=True,
+    hide_input=True)
 @click.argument("packages", nargs=-1)
 def remove_available_packages(password: str, packages: List[str]):
+    """Key to authenticate with the C&C server as a client. If omitted, it
+    will be prompted."""
+
     key = password.encode()
     for pack in packages:
         signature = signatures.new_signature(
@@ -91,9 +118,14 @@ def remove_available_packages(password: str, packages: List[str]):
             elif resp.status_code != 204:
                 print("Unexpected response from Command and Control Sever.")
 
-@main.command("lsenv")
+@main.command(
+    "lsenv",
+    short_help=
+        "Lists the environments currently registered at the C&C "
+        "server.")
 def lsenv():
     """Lists the environments currently registered at the C&C server."""
+
     try:
         resp = requests.get(f"{C2_URL}/environments")
     except requests.exceptions.ConnectionError:
@@ -103,7 +135,7 @@ def lsenv():
         for ip, ports in envs.items():
             for port, content in ports.items():
                 print(
-                    f"\n{ip}:{port}\nsession: {content['session_id']}\n"\
+                    f"\n{ip}:{port}\nsession: {content['session_id']}\n"
                     f"start: {content['session_start']}\n")
 
 @main.command("sessions_search")
@@ -293,14 +325,17 @@ def info(ip, port):
         else:
             print("Unexpected response from Command and Control Sever.")
 
-@main.command("lsinstalled")
+@main.command(
+    "lsinstalled",
+    short_help=
+        "Lists the currently instaled tests sets in the environment at "
+        "IP:PORT.")
 @click.argument("ip")
 @click.argument("port")
 def lsinstalled(ip, port):
-    """
-    Lists the currently instaled tests sets
-    in the environment at IP:PORT.
-    """
+    """Lists the currently instaled tests sets in the environment at
+    IP:PORT."""
+
     try:
         resp = requests.get(f"{C2_URL}/environments/{ip}/{port}/installed")
     except requests.exceptions.ConnectionError:
@@ -315,13 +350,16 @@ def lsinstalled(ip, port):
         else:
             print("Unexpected response from Command and Control Sever.")
 
-@main.command("install")
+@main.command(
+    "install",
+    short_help="Install the given PACKAGES in the environment at IP:PORT.")
 @click.option('--password', prompt=True, hide_input=True)
 @click.argument("ip")
 @click.argument("port")
 @click.argument("packages", nargs=-1)
 def install(password, ip, port, packages):
     """Install the given PACKAGES in the environment at IP:PORT."""
+
     prepared = requests.Request(
         "PATCH",
         f"{C2_URL}/environments/{ip}/{port}/installed",

@@ -39,6 +39,7 @@ InvalidTestMethod
     requirements.
 """
 
+
 import inspect
 import os
 import shutil
@@ -128,12 +129,12 @@ class TestSet(ABC):
         data.
 
         'timestamp_start': the instant when the test started in a string that
-        follows the date-time format (including time-secfrac) as described in
+        follows the date-time format (including time-secfrac) as described by
         RFC 3339. The UTC offset is 00:00, which is described as a "Z" at the
         end of the timestamp.
 
         'timestamp_end': the instant when the test ended in a string that
-        follows the date-time format (including time-secfrac) as described in
+        follows the date-time format (including time-secfrac) as described by
         RFC 3339. The UTC offset is 00:00, which is described as a "Z" at the
         end of the timestamp.
 
