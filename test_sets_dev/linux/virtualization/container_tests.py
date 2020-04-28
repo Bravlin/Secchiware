@@ -68,6 +68,7 @@ class DockerSet(TestSet):
     def docker_like_ip(self) -> TestResult:
         process = os.popen("ip addr show")
         for line in process:
+            line = line.lstrip()
             if line.startswith("inet"):
                 ip = line.split(" ")[1].split("/")[0]
                 if ip.startswith("172.17."):
