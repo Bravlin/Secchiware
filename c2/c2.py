@@ -268,7 +268,7 @@ def add_environment():
 
     to_insert = (
         ip,
-        int(port),
+        port,
         platform_info['platform'],
         platform_info['node'],
         platform_info['os']['system'],
@@ -307,7 +307,7 @@ def add_environment():
 
     return Response(status=204, mimetype="application/json")
 
-@app.route("/environments/<ip>/<port>", methods=["DELETE"])
+@app.route("/environments/<ip>/<int:port>", methods=["DELETE"])
 def remove_environment(ip, port):
     global environments
 
@@ -328,7 +328,7 @@ def remove_environment(ip, port):
     
     return Response(status=204, mimetype="application/json")
 
-@app.route("/environments/<ip>/<port>/info", methods=["GET"])
+@app.route("/environments/<ip>/<int:port>/info", methods=["GET"])
 def get_environment_info(ip, port):
     check_registered(ip, port)
 
@@ -364,7 +364,7 @@ def get_environment_info(ip, port):
 
     return jsonify(info)
     
-@app.route("/environments/<ip>/<port>/installed", methods=["GET"])
+@app.route("/environments/<ip>/<int:port>/installed", methods=["GET"])
 def list_installed_test_sets(ip, port):
     check_registered(ip, port)
 
@@ -378,7 +378,7 @@ def list_installed_test_sets(ip, port):
         return jsonify(resp.json())
     abort(502, description=f"Unexpected response from node at {ip}:{port}")
 
-@app.route("/environments/<ip>/<port>/installed", methods=["PATCH"])
+@app.route("/environments/<ip>/<int:port>/installed", methods=["PATCH"])
 def install_packages(ip, port):
     check_digest_header()
     check_authorization_header(client_key_recoverer, "Digest")
@@ -423,7 +423,7 @@ def install_packages(ip, port):
             description="Something went wrong when handling the request")
     abort(502, description=f"Unexpected response from node at {ip}:{port}")
 
-@app.route("/environments/<ip>/<port>/installed/<package>", methods=["DELETE"])
+@app.route("/environments/<ip>/<int:port>/installed/<package>", methods=["DELETE"])
 def delete_installed_package(ip, port, package):
     check_authorization_header(client_key_recoverer)
     check_registered(ip, port)
@@ -448,7 +448,7 @@ def delete_installed_package(ip, port, package):
         return abort(404, description=f"'{package}' not found at {ip}:{port}")
     abort(502, description=f"Unexpected response from node at {ip}:{port}")
 
-@app.route("/environments/<ip>/<port>/reports", methods=["GET"])
+@app.route("/environments/<ip>/<int:port>/reports", methods=["GET"])
 def execute_tests(ip, port):
     check_registered(ip, port)
     

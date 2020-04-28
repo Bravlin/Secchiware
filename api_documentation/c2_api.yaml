@@ -127,7 +127,7 @@ components:
       name: port
       required: true
       schema:
-        type: string
+        type: integer
       description: The port of a registered environment.
       example: 5100
     limit:
@@ -308,12 +308,12 @@ paths:
                   format: ipv4
                   example: 192.168.0.14
                 port:
-                  type: string
+                  type: integer
                   example: 5100
                 platform_info:
                   $ref: '#components/schemas/EnvironmentPlatformInformation'
               required:
-                - ip
+                - required
                 - port
                 - platform_info
       responses:

@@ -190,8 +190,8 @@ def connect_to_c2():
         "POST",
         f"{config['C2_URL']}/environments",
         json={
-            'ip': config['IP'],
-            'port': config['PORT'],
+            'ip': config.get('NAT_IP', config['IP']),
+            'port': config.get('NAT_PORT', config['PORT']),
             'platform_info': get_platform_info()
         }).prepare()
 
@@ -217,15 +217,18 @@ def connect_to_c2():
 def exit_gracefully(sig, frame):
     print("Exiting...")
 
+    ip = config.get('NAT_IP', config['IP'])
+    port = config.get('NAT_PORT', config['PORT'])
+
     signature = signatures.new_signature(
         config['C2_SECRET'],
         "DELETE",
-        f"/environments/{config['IP']}/{config['PORT']}")
+        f"/environments/{ip}/{port}")
     authorization_content = signatures.new_authorization_header("Node", signature)
 
     try:
         resp = rq.delete(
-            f"{config['C2_URL']}/environments/{config['IP']}/{config['PORT']}",
+            f"{config['C2_URL']}/environments/{ip}/{port}",
             headers={'Authorization': authorization_content})
         resp.raise_for_status()
     except rq.exceptions.ConnectionError:

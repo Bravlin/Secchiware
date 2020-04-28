@@ -2,5 +2,7 @@
     "C2_URL": "http://127.0.0.1:5000",
     "C2_SECRET": "MySuPeRDuPerSeCrEtKeY",
     "IP": "127.0.0.1",
-    "PORT": "4900"
+    "PORT": 4900,
+    "NAT_IP": "127.0.0.1",
+    "NAT_PORT": 4900
 }
