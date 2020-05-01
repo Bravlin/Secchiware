@@ -23,7 +23,7 @@ def main(c2_url: str):
 
 @main.command(
     "lsavailable",
-    short_help="Lists the test sets available at the C&C server.")
+    short_help="List the test sets available at the C&C server.")
 def lsavialable():
     """Lists the test sets available at the C&C server."""
 
@@ -39,7 +39,7 @@ def lsavialable():
 
 @main.command(
     "upload",
-    short_help="Uploads a tar.gz file full of packages to the C&C server.")
+    short_help="Upload a tar.gz file full of packages to the C&C server.")
 @click.option(
     "--password",
     type=str,
@@ -84,7 +84,9 @@ def upload_compressed_packages(password: str, file_path: click.Path):
             elif resp.status_code != 204:
                 print("Unexpected response from Command and Control Sever.")
 
-@main.command("remove")
+@main.command(
+    "remove",
+    short_help="Delete the given top level PACKAGES from the C&C server.")
 @click.option(
     "--password",
     help=
@@ -94,8 +96,7 @@ def upload_compressed_packages(password: str, file_path: click.Path):
     hide_input=True)
 @click.argument("packages", nargs=-1)
 def remove_available_packages(password: str, packages: List[str]):
-    """Key to authenticate with the C&C server as a client. If omitted, it
-    will be prompted."""
+    """Delete the given top level PACKAGES from the C&C server."""
 
     key = password.encode()
     for pack in packages:
@@ -121,10 +122,10 @@ def remove_available_packages(password: str, packages: List[str]):
 @main.command(
     "lsenv",
     short_help=
-        "Lists the environments currently registered at the C&C "
+        "List the environments currently registered at the C&C "
         "server.")
 def lsenv():
-    """Lists the environments currently registered at the C&C server."""
+    """List the environments currently registered at the C&C server."""
 
     try:
         resp = requests.get(f"{C2_URL}/environments")
@@ -138,30 +139,60 @@ def lsenv():
                     f"\n{ip}:{port}\nsession: {content['session_id']}\n"
                     f"start: {content['session_start']}\n")
 
-@main.command("sessions_search")
-@click.option("--session_id", multiple=True)
-@click.option("--start_from")
-@click.option("--start_to")
-@click.option("--end_from")
-@click.option("--end_to")
-@click.option("--ip", multiple=True)
-@click.option("--port", multiple=True)
-@click.option("--system", multiple=True)
-@click.option("--order_by")
-@click.option("--arrange")
-@click.option("--limit")
+@main.command(
+    "sessions_search",
+    short_help=
+        "Recover information about sessions that match the given criteria.")
+@click.option(
+    "--session_id",
+    type=int,
+    multiple=True,
+    help="Filters by id. Multiple.")
+@click.option(
+    "--start_from",
+    help="Filters by oldest start timestamp allowed.")
+@click.option(
+    "--start_to",
+    help="Filters by most recent start timestamp allowed.")
+@click.option("--end_from", help="Filters by oldest end timestamp allowed.")
+@click.option(
+    "--end_to",
+    help="Filters by most recent end timestamp allowed.")
+@click.option("--ip", multiple=True, help="Filters by ip. Multiple.")
+@click.option(
+    "--port",
+    type=int,
+    multiple=True,
+    help="Filters by port. Multiple.")
+@click.option(
+    "--system",
+    multiple=True,
+    help="Filters by operating system. Multiple.")
+@click.option(
+    "--order_by",
+    type=click.Choice(
+        ["id", "start", "end", "ip", "port", "system"],
+        case_sensitive=False),
+    help="Specifies the parameter to sort by.")
+@click.option(
+    "--arrange",
+    type=click.Choice(["asc", "desc"], case_sensitive=False),
+    help="Ascending or descending sort order.")
+@click.option("--limit", type=int, help="Max quantity of allowed results.")
 def search_sessions(
-        session_id,
-        start_from,
-        start_to,
-        end_from,
-        end_to,
-        ip,
-        port,
-        system,
-        order_by,
-        arrange,
-        limit):
+        session_id: List[int],
+        start_from: str,
+        start_to: str,
+        end_from: str,
+        end_to: str,
+        ip: List[str],
+        port: List[int],
+        system: List[str],
+        order_by: str,
+        arrange: str,
+        limit: int):
+    """Recover information about sessions that match the given criteria."""
+
     query = ""
     if session_id:
         query = f"{query}&ids={','.join(session_id)}"
@@ -199,9 +230,13 @@ def search_sessions(
         else:
             print("Unexpected response from Command and Control Sever.")
 
-@main.command("session_get")
+@main.command(
+    "session_get",
+    short_help="Get more information about an specific SESSION.")
 @click.argument("session")
-def get_session(session):
+def get_session(session: int):
+    """Get more information about an specific SESSION."""
+
     try:
         resp = requests.get(f"{C2_URL}/sessions/{session}")
     except requests.exceptions.ConnectionError:
@@ -214,10 +249,18 @@ def get_session(session):
         else:
             print("Unexpected response from Command and Control Sever.")
 
-@main.command("session_delete")
-@click.option('--password', prompt=True, hide_input=True)
+@main.command("sessions_delete", short_help="Delete the specified SESSIONS.")
+@click.option(
+    "--password",
+    help=
+        "Key to authenticate with the C&C server as a client. If omitted, it "
+        "will be prompted.",
+    prompt=True,
+    hide_input=True)
 @click.argument("sessions", nargs=-1)
-def delete_sessions(password, sessions):
+def delete_sessions(password: str, sessions: List[int]):
+    """Delete the specified SESSIONS."""
+
     key = password.encode()
     for session in sessions:
         signature = signatures.new_signature(
@@ -239,22 +282,48 @@ def delete_sessions(password, sessions):
             elif resp.status_code != 204:
                 print("Unexpected response from Command and Control Sever.")
 
-@main.command("executions_search")
-@click.option("--execution_id", multiple=True)
-@click.option("--session", multiple=True)
-@click.option("--registered_from")
-@click.option("--registered_to")
-@click.option("--order_by")
-@click.option("--arrange")
-@click.option("--limit")
+@main.command(
+    "executions_search",
+    short_help=
+        "Recover information about executions that match the given "
+        "criteria.")
+@click.option(
+    "--execution_id",
+    type=int,
+    multiple=True,
+    help="Filters by id. Multiple.")
+@click.option(
+    "--session",
+    type=int,
+    multiple=True,
+    help="Filters by session. Multiple.")
+@click.option(
+    "--registered_from",
+    type=str,
+    help="Filters by oldest register timestamp allowed.")
+@click.option(
+    "--registered_to",
+    type=str,
+    help="Filters by most recent register timestamp allowed.")
+@click.option(
+    "--order_by",
+    type=click.Choice(["id", "session", "registered"], case_sensitive=False),
+    help="Specifies the parameter to sort by.")
+@click.option(
+    "--arrange",
+    type=click.Choice(["asc", "desc"], case_sensitive=False),
+    help="Ascending or descending sort order.")
+@click.option("--limit", type=int, help="Max quantity of allowed results.")
 def search_executions(
-        execution_id,
-        session,
-        registered_from,
-        registered_to,
-        order_by,
-        arrange,
-        limit):
+        execution_id: List[int],
+        session: List[int],
+        registered_from: str,
+        registered_to: str,
+        order_by: str,
+        arrange: str,
+        limit: int):
+    """Recover information about executions that match the given criteria."""
+
     query = ""
     if execution_id:
         query = f"{query}&ids={','.join(execution_id)}"
@@ -284,10 +353,20 @@ def search_executions(
         else:
             print("Unexpected response from Command and Control Sever.")
 
-@main.command("execution_delete")
-@click.option('--password', prompt=True, hide_input=True)
+@main.command(
+    "executions_delete",
+    short_help="Delete the specified EXECUTIONS.")
+@click.option(
+    "--password",
+    help=
+        "Key to authenticate with the C&C server as a client. If omitted, it "
+        "will be prompted.",
+    prompt=True,
+    hide_input=True)
 @click.argument("executions", nargs=-1)
-def delete_executions(password, executions):
+def delete_executions(password: str, executions: List[int]):
+    """Delete the specified EXECUTIONS."""
+
     key = password.encode()
     for execution in executions:
         signature = signatures.new_signature(
@@ -309,10 +388,17 @@ def delete_executions(password, executions):
             elif resp.status_code != 204:
                 print("Unexpected response from Command and Control Sever.")
 
-@main.command("info")
+@main.command(
+    "info",
+    short_help=
+        "Recover information about the platform where the node at IP:PORT is "
+        "installed.")
 @click.argument("ip")
-@click.argument("port")
-def info(ip, port):
+@click.argument("port", type=int)
+def info(ip: str, port: int):
+    """Recover information about the platform where the node at IP:PORT is
+    installed."""
+
     try:
         resp = requests.get(f"{C2_URL}/environments/{ip}/{port}/info")
     except requests.exceptions.ConnectionError:
@@ -328,12 +414,12 @@ def info(ip, port):
 @main.command(
     "lsinstalled",
     short_help=
-        "Lists the currently instaled tests sets in the environment at "
+        "List the currently instaled tests sets in the environment at "
         "IP:PORT.")
 @click.argument("ip")
-@click.argument("port")
-def lsinstalled(ip, port):
-    """Lists the currently instaled tests sets in the environment at
+@click.argument("port", type=int)
+def lsinstalled(ip: str, port: int):
+    """List the currently instaled tests sets in the environment at
     IP:PORT."""
 
     try:
@@ -353,11 +439,17 @@ def lsinstalled(ip, port):
 @main.command(
     "install",
     short_help="Install the given PACKAGES in the environment at IP:PORT.")
-@click.option('--password', prompt=True, hide_input=True)
+@click.option(
+    "--password",
+    help=
+        "Key to authenticate with the C&C server as a client. If omitted, it "
+        "will be prompted.",
+    prompt=True,
+    hide_input=True)
 @click.argument("ip")
-@click.argument("port")
+@click.argument("port", type=int)
 @click.argument("packages", nargs=-1)
-def install(password, ip, port, packages):
+def install(password: str, ip: str, port: int, packages: List[str]):
     """Install the given PACKAGES in the environment at IP:PORT."""
 
     prepared = requests.Request(
@@ -388,12 +480,22 @@ def install(password, ip, port, packages):
         elif resp.status_code != 204:
             print("Unexpected response from Command and Control Sever.")
 
-@main.command("uninstall")
-@click.option('--password', prompt=True, hide_input=True)
+@main.command(
+    "uninstall",
+    short_help="Remove the specified PACKAGES from the node at IP:PORT.")
+@click.option(
+    "--password",
+    help=
+        "Key to authenticate with the C&C server as a client. If omitted, it "
+        "will be prompted.",
+    prompt=True,
+    hide_input=True)
 @click.argument("ip")
-@click.argument("port")
+@click.argument("port", type=int)
 @click.argument("packages", nargs=-1)
-def uninstall(password, ip, port, packages):
+def uninstall(password: str, ip: str, port: int, packages: List[str]):
+    """Remove the specified PACKAGES from the node at IP:PORT."""
+
     key = password.encode()
     for pack in packages:
         signature = signatures.new_signature(
@@ -415,13 +517,20 @@ def uninstall(password, ip, port, packages):
             elif resp.status_code != 204:
                 print("Unexpected response from Command and Control Sever.")
 
-@main.command("reports_get")
+@main.command(
+    "reports_get",
+    short_help=
+        "Execute and recover the reports of the tests installed in the "
+        "environment at IP:PORT.")
 @click.argument("ip")
-@click.argument("port")
+@click.argument("port", type=int)
 @click.option("--package", "-p", multiple=True)
 @click.option("--module", "-m", multiple=True)
 @click.option("--test_set", "-t", multiple=True)
-def get_reports(ip, port, package, module, test_set):
+def get_reports(ip: str, port: int, package: str, module: str, test_set: str):
+    """Execute and recover the reports of the tests installed in the
+    environment at IP:PORT."""
+
     query = ""
     if package:
         query = f"{query}&packages={','.join(package)}"
