@@ -2,7 +2,6 @@ import hmac
 import json
 import platform
 import os
-import re
 import requests as rq
 import signal
 import signatures
@@ -18,7 +17,40 @@ from flask import abort, Flask, jsonify, request, Response
 from hashlib import sha256
 
 
+################################ Globals #####################################
+
+SCRIPT_PATH = os.path.dirname(os.path.abspath(__file__))
+TESTS_PATH = os.path.join(SCRIPT_PATH, "test_sets")
+
+with open(os.path.join(SCRIPT_PATH, "config.json"), "r") as config_file:
+    config = json.load(config_file)
+config['C2_SECRET'] = config['C2_SECRET'].encode()
+
+installed = OrderedListOfDict('name', str)
+
+
+######################## Request check functions #############################
+
 def check_authorization_header(*mandatory_headers) -> None:
+    """Verifies that the incoming request fulfills the SECCHIWARE-HMAC-256.
+    authorization scheme.
+    
+    The "Authorization" header must be present in the request, it must have
+    the proper format and the informed signature must correspond to the
+    request's content.
+
+    Parameters
+    ----------
+    mandatory_headers: *Tuple[str], optional
+        A variable amount of header keys that must be present in the incoming
+        request.
+
+    Abort
+    -----
+    401
+        The request does not fulfill the described criteria.
+    """
+
     if not 'Authorization' in request.headers:
         abort(401, description="No 'Authorization' header found in request.")
     try:
@@ -37,9 +69,12 @@ def check_authorization_header(*mandatory_headers) -> None:
     if not is_valid:
         abort(401, description="Invalid signature.")
 
+######################## Flask app initialization ############################
 
 app = Flask(__name__)
 
+
+############################# Error handlers #################################
 
 @app.errorhandler(400)
 def bad_request(e):
@@ -49,7 +84,8 @@ def bad_request(e):
 def unauthorized(e):
     res = jsonify(error=str(e))
     res.status_code = 401
-    res.headers['WWW-Authenticate'] = 'SECCHIWARE-HMAC-256 realm="Access to node"'
+    res.headers['WWW-Authenticate'] = (
+        'SECCHIWARE-HMAC-256 realm="Access to node"')
     return res
 
 @app.errorhandler(404)
@@ -60,6 +96,8 @@ def not_found(e):
 def unsupported_media_type(e):
     return jsonify(error=str(e)), 415
 
+
+############################### Endpoints ####################################
 
 @app.route("/", methods=["DELETE"])
 def stop_node():
@@ -160,7 +198,56 @@ def delete_package(package):
     return Response(status=204, mimetype="application/json")
 
 
+########################## Additional functions ##############################
+
 def get_platform_info() -> dict:
+    """Recovers information about the current platform's operating system, its
+    processor and its Python interpreter.
+
+    It uses the module platform to obtain that information.
+
+    The returned dictionary contains the following structure:
+
+    1. 'platform':
+        A summary of the current platform.
+    2. 'node':
+        The name of the host machine.
+    3. 'os':
+        Information about the operating system. It contains the following
+        keys:
+            3.1. 'system':
+                The general name of the operating system. Examples: "Linux",
+                "Windows".
+            3.2. 'release':
+                The general number of release of the operating system.
+            3.3. 'version':
+                The specific release version of the operating system.
+    4. 'hardware':
+        Information about the processor. It contains the following keys:
+            4.1. 'machine':
+                The general architecture of the processor.
+            4.2. 'processor:
+                The name of the processor. Not all platforms provide it. In
+                some cases it may contain the same value as 'machine'.
+    5. 'python':
+        Information about the Python interpreter. It contains the following
+        keys:
+            5.1. 'build':
+                A tuple of two strings; the first one is the build's number
+                and the second one is its date.
+            5.2. 'compiler':
+                The compiler used to build the interpreter.
+            5.3. 'implementation':
+                The specific implementation of the interpreter. Example:
+                "CPython".
+            5.4. 'version': The used version of the language.
+
+    Returns
+    -------
+    dict
+        A dictionary containing the structure previously described.
+    """
+
     os_info = {}
     os_info['system'] = platform.system()
     os_info['release'] = platform.release()
@@ -185,7 +272,16 @@ def get_platform_info() -> dict:
 
     return info
 
-def connect_to_c2():
+def connect_to_c2() -> bool:
+    """Tries to make contact with the C&C server.
+
+    Returns
+    -------
+    bool
+        Wheter the C&C was sucessfully reached and it returned a status code
+        of 204.
+    """
+
     prepared = rq.Request(
         "POST",
         f"{config['C2_URL']}/environments",
@@ -205,16 +301,20 @@ def connect_to_c2():
         "/environments",
         signature_headers=headers,
         header_recoverer=lambda h: prepared.headers.get(h))
-    prepared.headers['Authorization'] =\
-        signatures.new_authorization_header("Node", signature, headers)
+    prepared.headers['Authorization'] = (
+        signatures.new_authorization_header("Node", signature, headers))
 
     try:
         resp = rq.Session().send(prepared)
     except rq.exceptions.ConnectionError:
-        return False     
+        return False
+
     return resp.status_code == 204
 
-def exit_gracefully(sig, frame):
+def exit_gracefully(sig, frame) -> None:
+    """Signal handler that tries to warn the C&C server that the node is
+    shutting down before it does so."""
+
     print("Exiting...")
 
     ip = config.get('NAT_IP', config['IP'])
@@ -224,7 +324,8 @@ def exit_gracefully(sig, frame):
         config['C2_SECRET'],
         "DELETE",
         f"/environments/{ip}/{port}")
-    authorization_content = signatures.new_authorization_header("Node", signature)
+    authorization_content = (
+        signatures.new_authorization_header("Node", signature))
 
     try:
         resp = rq.delete(
@@ -239,29 +340,26 @@ def exit_gracefully(sig, frame):
         sys.exit()
 
 
-if __name__ == "__main__":
-    SCRIPT_PATH = os.path.dirname(os.path.abspath(__file__))
-    TESTS_PATH = os.path.join(SCRIPT_PATH, "test_sets")
+############################### Main program #################################
 
-    with open(os.path.join(SCRIPT_PATH, "config.json"), "r") as config_file:
-        config = json.load(config_file)
-    config['C2_SECRET'] = config['C2_SECRET'].encode()
+if not os.path.isdir(TESTS_PATH):
+    os.mkdir(TESTS_PATH)
+    open(os.path.join(TESTS_PATH, "__init__.py"), "w").close()
 
-    if not os.path.isdir(TESTS_PATH):
-        os.mkdir(TESTS_PATH)
-        open(os.path.join(TESTS_PATH, "__init__.py"), "w").close()
+if connect_to_c2():
+    print("Connected successfuly!")
 
-    if connect_to_c2():
-        signal.signal(signal.SIGTERM, exit_gracefully)
-        signal.signal(signal.SIGINT, exit_gracefully)
-        print("Connected successfuly!")
-        installed = OrderedListOfDict('name', str)
-        try:
-            installed.content = test_utils.get_installed_test_sets("test_sets")
-        except Exception as e:
-            print(str(e))
+    signal.signal(signal.SIGTERM, exit_gracefully)
+    signal.signal(signal.SIGINT, exit_gracefully)
+
+    try:
+        installed.content = test_utils.get_installed_test_sets("test_sets")
+    except Exception as e:
+        print(str(e))
+
+    if __name__ == "__main__":
         app.run(host=config['IP'], port=config['PORT'])
-    else:
-        print("Connection refused.\n\nExecuting installed tests...\n\n")
-        tests = test_utils.TestSetCollection("test_sets")
-        print(json.dumps(tests.run_all_tests(), indent=2))
+else:
+    print("Connection refused.\n\nExecuting installed tests...\n\n")
+    tests = test_utils.TestSetCollection("test_sets")
+    print(json.dumps(tests.run_all_tests(), indent=2))

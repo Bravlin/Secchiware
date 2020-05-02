@@ -15,23 +15,75 @@ from custom_collections import OrderedListOfDict
 from flask import abort, Flask, g, jsonify, request, Response
 from flask_cors import CORS
 from hashlib import sha256
-from typing import Optional
+from typing import Callable, Dict, Optional, Tuple
 
 
-def client_key_recoverer(key_id) -> Optional[bytes]:
-    """The key recoverer for client oriented endpoints. Only the ID 'Client' is
-    allowed."""
+################################ Globals #####################################
+
+SCRIPT_PATH = os.path.dirname(os.path.abspath(__file__))
+TESTS_PATH = os.path.join(SCRIPT_PATH, "test_sets")
+DATABASE_PATH = os.path.join(SCRIPT_PATH, "secchiware.db")
+
+with open(os.path.join(SCRIPT_PATH, "config.json"), "r") as config_file:
+    config = json.load(config_file)
+config['NODE_SECRET'] = config['NODE_SECRET'].encode()
+config['CLIENT_SECRET'] = config['CLIENT_SECRET'].encode()
+
+available = OrderedListOfDict('name', str)
+
+environments = {}
+
+
+########################### Key recoverer functions ##########################
+
+def client_key_recoverer(key_id: str) -> Optional[bytes]:
+    """The key recoverer for client oriented endpoints. Only the ID 'Client'
+    is allowed.
+    
+    Parameters
+    ----------
+    key_id: str
+        The ID to look for.
+
+    Returns
+    -------
+    bytes, optional
+        The key corresponding to the given ID or None if there was no match.
+    """
 
     return config['CLIENT_SECRET'] if key_id == "Client" else None
 
-def node_key_recoverer(key_id) -> Optional[bytes]:
+def node_key_recoverer(key_id: str) -> Optional[bytes]:
     """The key recoverer for node oriented endpoints. Only the ID 'Node' is
-    allowed."""
+    allowed.
+    
+    Parameters
+    ----------
+    key_id: str
+        The ID to look for.
+
+    Returns
+    -------
+    bytes, optional
+        The key corresponding to the given ID or None if there was no match.
+    """
 
     return config['NODE_SECRET'] if key_id == "Node" else None
 
 
+######################## Database related functions ##########################
+
 def init_database() -> sqlite3.Connection:
+    """Starts a connection to a SQLite database.
+
+    If the database does not exists, it is created.
+
+    Returns
+    -------
+    sqlite3.Connection
+        The opened connection to the database.
+    """
+
     db = sqlite3.connect(DATABASE_PATH)
     db.row_factory = sqlite3.Row
     cursor = db.cursor()
@@ -83,10 +135,46 @@ def init_database() -> sqlite3.Connection:
 def api_parametrized_search(
         db: sqlite3.Connection,
         table: str,
-        order_by_api_to_db: dict,
-        where_api_to_db: dict,
+        order_by_api_to_db: Dict[str, str],
+        where_api_to_db: Dict[str, Tuple[str, str]],
         parameters: dict,
         select_columns: tuple = None) -> sqlite3.Cursor:
+    """Converts the recieved parameters into a SQL SELECT statement, executes
+    it and returns the corresponding cursor.
+
+    Parameters
+    ----------
+    db: sqlite3.Connection
+        The connection to the database to query to.
+    table: str
+        The database table to look into.
+    order_by_api_to_db: Dict[str, str]
+        A dictionary where each key is one of the accepted parameters to sort
+        by of the external API and its value is the corresponding column name.
+    where_api_to_db: Dict[str, Tuple[str, str]]
+        A dictionary where each key is one of the accepted parameters to
+        filter by of the external API and its values is a tuple where the
+        first member is the corresponding column name and the second one is
+        the associated operator.
+    parameters: dict
+        A dictionary where each key-value pair is the name of an argument
+        recieved by the external API and its corresponding value.
+    select_columns: tuple
+        The columns that the developer wants to return with the generated
+        query.
+
+    Exceptions
+    ----------
+    ValueError
+        There is content present in the "parameters" argument that is not
+        valid.
+
+    Returns
+    -------
+    sqlite3.Cursor
+        A cursor to the formulated query.
+    """
+
     if not select_columns:
         query = f"SELECT * FROM {table}"
     else:
@@ -141,26 +229,39 @@ def api_parametrized_search(
     query = f"{query} {where_clause} {order_by_clause} {limit_clause}"
     return db.execute(query, placeholders_values)
 
-
 def get_database() -> sqlite3.Connection:
+    """Gets the server instance's database connection.
+
+    It starts one if it was not already created.
+
+    Returns
+    -------
+    sqlite3.Connection
+        The server's open database connection.
+    """
+
     db = getattr(g, '_database', None)
     if db is None:
         db = g._database = init_database()
     return db
 
 
-def check_registered(ip, port):
-    """Verifies if the given ip and port correspond to an active environment.
+######################## Request check functions #############################
 
-    If there is no match, it aborts the current request handler with status
-    code 404.
+def check_registered(ip: str, port: int):
+    """Verifies if the given ip and port correspond to an active environment.
 
     Parameters
     ----------
-    ip
+    ip: str
         The ip to look for.
-    port
+    port: int
         The port associated to the given ip to look for.
+
+    Abort
+    -----
+    404
+        There is no environment registered with the given ip and port.
     """
 
     if not (ip in environments and port in environments[ip]):
@@ -170,14 +271,26 @@ def check_registered(ip, port):
 def check_is_json():
     """Verifies that the current request's MIME type is 'application/json'.
 
-    If that's not the case, it aborts the current request handler with status
-    code 415.
+    Abort
+    -----
+    415
+        The MIME type of the request is not vlid.
     """
 
     if not request.is_json:
         abort(415, description="Content Type is not application/json")
 
 def check_digest_header():
+    """Verifies that the current request has a "Digest" header and that the
+    provided digest corresponds to the request's body.
+
+    Abort
+    -----
+    400
+        The "Digest" header is missing, the algorithm used to calculate the
+        digest is not SHA-256 or it does not match the request's body.
+    """
+
     if not 'Digest' in request.headers:
         abort(400, description="'Digest' header mandatory.")
     if not request.headers['Digest'].startswith("sha-256="):
@@ -186,7 +299,31 @@ def check_digest_header():
     if digest != request.headers['Digest'].split("=", 1)[1]:
         abort(400, description="Given digest does not match content.")
 
-def check_authorization_header(key_recoverer, *mandatory_headers):
+def check_authorization_header(
+        key_recoverer: Callable[[str], Optional[bytes]],
+        *mandatory_headers):
+    """Verifies that the incoming request fulfills the SECCHIWARE-HMAC-256.
+    authorization scheme.
+    
+    The "Authorization" header must be present in the request, it must have
+    the proper format and the informed signature must correspond to the
+    request's content.
+
+    Parameters
+    ----------
+    key_recoverer: Callable[[str], Optional[bytes]]
+        A function that returns the corresponding key given an ID or None if
+        there is no match.
+    mandatory_headers: *Tuple[str], optional
+        A variable amount of header keys that must be present in the incoming
+        request.
+
+    Abort
+    -----
+    401
+        The request does not fulfill the described criteria.
+    """
+
     if not 'Authorization' in request.headers:
         abort(401, description="No 'Authorization' header found in request.")
     try:
@@ -206,15 +343,21 @@ def check_authorization_header(key_recoverer, *mandatory_headers):
         abort(401, description="Invalid signature.")
 
 
-app = Flask(__name__)
-CORS(app, resources={
-    r"/environments": {'methods': "GET"},
-    r"/environments/[^/]+/[^/]+/+": {},
-    r"/executions/*": {},
-    r"/sessions/*": {},
-    r"/test_sets/*": {}
-})
+######################## Flask app initialization ############################
 
+app = Flask(__name__)
+CORS(
+    app,
+    resources={
+        r"/environments": {'methods': "GET"},
+        r"/environments/[^/]+/[^/]+/+": {},
+        r"/executions/*": {},
+        r"/sessions/*": {},
+        r"/test_sets/*": {}
+    })
+
+
+############################# Error handlers #################################
 
 @app.errorhandler(400)
 def bad_request(e):
@@ -224,7 +367,8 @@ def bad_request(e):
 def unauthorized(e):
     res = jsonify(error=str(e))
     res.status_code = 401
-    res.headers['WWW-Authenticate'] = 'SECCHIWARE-HMAC-256 realm="Access to C2"'
+    res.headers['WWW-Authenticate'] = (
+        'SECCHIWARE-HMAC-256 realm="Access to C2"')
     return res
 
 @app.errorhandler(404)
@@ -247,6 +391,8 @@ def bad_gateway(e):
 def gateway_timeout(e):
     return jsonify(error=str(e)), 504
 
+
+############################### Endpoints ####################################
 
 @app.route("/environments", methods=["GET"])
 def list_environments():
@@ -766,8 +912,15 @@ def delete_package(package):
     available.delete(package)
     return Response(status=204, mimetype="application/json")
 
+########################## Additional functions ##############################
 
 def exit_gracefully(sig, frame):
+    """Signal handler that tries to warn all currently working nodes that the
+    C&C server is shutting down before it does so.
+    
+    It also updates the database ending all current sessions.
+    """
+
     print("Starting exit...")
 
     if environments:
@@ -809,25 +962,16 @@ def exit_gracefully(sig, frame):
     sys.exit()
 
 
-SCRIPT_PATH = os.path.dirname(os.path.abspath(__file__))
-TESTS_PATH = os.path.join(SCRIPT_PATH, "test_sets")
-DATABASE_PATH = os.path.join(SCRIPT_PATH, "secchiware.db")
-
-with open(os.path.join(SCRIPT_PATH, "config.json"), "r") as config_file:
-    config = json.load(config_file)
-config['NODE_SECRET'] = config['NODE_SECRET'].encode()
-config['CLIENT_SECRET'] = config['CLIENT_SECRET'].encode()
+############################### Main program #################################
 
 if not os.path.isdir(TESTS_PATH):
     os.mkdir(TESTS_PATH)
     open(os.path.join(TESTS_PATH, "__init__.py"), "w").close()
 
-available = OrderedListOfDict('name', str)
 try:
     available.content = test_utils.get_installed_test_sets("test_sets")
 except Exception as e:
     print(str(e))
-environments = {}
 
 signal.signal(signal.SIGTERM, exit_gracefully)
 signal.signal(signal.SIGINT, exit_gracefully)

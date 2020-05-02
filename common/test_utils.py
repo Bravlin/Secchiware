@@ -422,22 +422,17 @@ def get_installed_package(package_name: str) -> dict:
     The returned dictionary contains the following keys:
 
     1. 'name': the package base name.
-
     2. 'subpackages': a list of dictionaries with a recursive format
     representing the subpackages found.
-
     3. 'modules': a list of dictionaries representing the found modules within
     the package. They have the following keys:
-
-    3.1 'name': the name of the module.
-    
-    3.2 'test_sets': a list of dictionaries representing the classes extended
-    from TestSet found in the given module. They contain the following keys:
-    
-    3.2.1 'name': the name of the class.
-    
-    3.2.2 'tests': a list of the names of the test methods found within the
-    class.
+        3.1 'name': the name of the module.
+        3.2 'test_sets': a list of dictionaries representing the classes
+        extended from TestSet found in the given module. They contain the
+        following keys:
+            3.2.1 'name': the name of the class.
+            3.2.2 'tests': a list of the names of the test methods found
+            within the class.
 
     Parameters
     ----------
