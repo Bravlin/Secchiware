@@ -8,6 +8,8 @@ dll = None
 
 # Loads the DLL used by all TestSets of the module
 def getWindowsAPIDLL():
+    global dll
+
     if dll is None:
         package_dir = os.path.dirname(os.path.abspath(__file__))
         shared_bin_dir = os.path.join(package_dir, "shared", "bin")
@@ -22,7 +24,7 @@ class WindowsAPIDebuggerSet(TestSet):
         description=
             "Calls the function IsDebuggerPresent from the Windows API.")
     def windows_api_is_debugger_present(self) -> TestResult:
-        return getWindowsAPIDLL().IsDebuggerPresent()
+        return getWindowsAPIDLL().WindowsAPI_IsDebuggerPresent()
 
 
 class WindowsAPIVirtualizationSet(TestSet):
@@ -33,7 +35,7 @@ class WindowsAPIVirtualizationSet(TestSet):
             "Checks if "
             "HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Control\\"
             "VirtualDeviceDrivers exists.")
-    def windows_api_virtual_device_drivers_exists(self) -> TestResult:
+    def windows_api_virtual_device_drivers_exist(self) -> TestResult:
         return getWindowsAPIDLL().WindowsAPI_VirtualDeviceDriversPresent()
 
 

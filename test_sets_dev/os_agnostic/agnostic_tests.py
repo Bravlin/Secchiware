@@ -5,6 +5,7 @@ import statistics
 from concurrent.futures import ThreadPoolExecutor
 from hashlib import sha256
 from test_utils import TestResult, TestSet
+from timeit import default_timer
 
 
 class AgnosticNetworkingSet(TestSet):
@@ -66,9 +67,9 @@ class AgnosticAntiAnalysisSet(TestSet):
             b"deserunt mollit anim id est laborum.")
         execution_times = []
         for _ in range(100):
-            start_time = time.process_time()
+            start_time = default_timer()
             sha256(phrase).hexdigest()
-            end_time = time.process_time()
+            end_time = default_timer()
             execution_times.append(end_time - start_time)
         mean = statistics.mean(execution_times)
         sigma = statistics.stdev(execution_times, mean)
