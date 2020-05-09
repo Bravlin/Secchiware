@@ -14,29 +14,37 @@ components:
       properties:
         name:
           type: string
+          description: Name of the package.
         subpackages:
           type: array
+          description: Information about the contained subpackages. Recursive.
           items:
             $ref: '#/components/schemas/TestsPackageInfo'
           uniqueItems: true
         modules:
           type: array
+          description: Information about the contained modules.
           items:
             type: object
             properties:
               name:
                 type: string
+                description: Name of the module.
               test_sets:
                 type: array
+                description: Information about the test sets found in the module.
                 items:
                   type: object
                   properties:
                     name:
                       type: string
+                      description: Name of the set.
                     tests:
                       type: array
+                      description: The tests contained in the set.
                       items:
                         type: string
+                        description: The identifier of the test inside its set.
                       uniqueItems: true
                   required:
                     - name
@@ -65,19 +73,29 @@ components:
       properties:
         test_name:
           type: string
+          description: Name of the test.
         test_description:
           type: string
+          description: A brief summary of what the test does.
         result_code:
           type: integer
+          description: >
+            Represents the test outcome.
+              * result_code > 0: The test was successful.
+              * result_code = 0: Something prevented the proper execution of the test or it did not provide conclusive results.
+              * result_code < 0: The test failed.
         additional_info:
           type: object
           additionalProperties: true
+          description: Any additional information that the test developer wanted to provide in key-value fashion.
         timestamp_start:
           type: string
           format: date-time
+          description: The start time of the test as a RFC 3339 date-time, up to second fraction resolution.
         timestamp_end:
           type: string
           format: date-time
+          description: The end time of the test as a RFC 3339 date-time, up to second fraction resolution.
       required:
         - test_name
         - test_description

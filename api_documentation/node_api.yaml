@@ -168,7 +168,7 @@ paths:
       parameters:
         - in: header
           name: Digest
-          description: sha256 hash of the request's body
+          description: sha256 hash of the request's body.
           schema:
             type: string
           example: sha-256=U3dhZ2dlciByb2Nrcw==
@@ -183,7 +183,7 @@ paths:
                 packages:
                   type: string
                   format: binary
-                  description: File in tar.gz format
+                  description: File in tar.gz format.
               required:
                 - packages
       security:

@@ -27,48 +27,62 @@ components:
       properties:
         platform:
           type: string
+          description: A summary of the operating system and hardware of the environment.
         node:
           type: string
+          description: Name of the machine where the environment is hosted.
         os:
           type: object
+          description: Information about the environment's operating system.
           properties:
             system:
               type: string
+              description: "System type. e.g: 'Linux', 'Windows'."
             release:
               type: string
+              description: Release number.
             version:
               type: string
+              description: Detailed summary of the operating system's version.
           required:
             - system
             - release
             - version
         hardware:
           type: object
+          description: Information about the environment's processor.
           properties:
             machine:
+              description: The machine's type (architecture).
               type: string
             processor:
+              description: Actual name (model) of the processor. It may return an empty string or the same content as the 'machine' field in some cases.
               type: string
           required:
             - machine
             - processor
         python:
           type: object
+          description: Information about the Python interpreter used by the environment.
           properties:
             build:
               type: array
+              description: An array of two elements. The first one corresponds to the interpreter's build verison and the second one to its compilation date.
               minLength: 2
               maxLength: 2
               items:
                 type: string
             compiler:
               type: string
+              description: Compiler used to build the interpreter.
             implementation:
               type: string
+              description: "Denomination of the interpreter implementation. e.g: 'CPython'."
             version:
               type: string
+              description: Version of the Python language.
           required:
-            - buid
+            - build
             - compiler
             - implementation
             - version
@@ -262,16 +276,20 @@ paths:
             application/json:
               schema:
                 type: object
+                description: Each key is a string containing an IP.
                 additionalProperties:
                   type: object
+                  description: Each key represents the port of an environment at the corresponding IP.
                   additionalProperties:
                     type: object
                     properties:
                       session_id:
                         type: integer
+                        description: The identifier of the session.
                       session_start:
                         type: string
                         format: date-time
+                        description: The start time of the session as a RFC 3339 date-time, up to second resolution.
                     required:
                       - session_id
                       - session_start
@@ -306,9 +324,11 @@ paths:
                 ip:
                   type: string
                   format: ipv4
+                  description: The node's listening IP.
                   example: 192.168.0.14
                 port:
                   type: integer
+                  description: The node's listening port.
                   example: 5100
                 platform_info:
                   $ref: '#components/schemas/EnvironmentPlatformInformation'
@@ -594,16 +614,22 @@ paths:
                   properties:
                     execution_id:
                       type: integer
+                      description: Execution's identifier.
                       example: 32
                     session_id:
                       type: integer
+                      description: The identifier of the session to which the execution belongs.
                       example: 14
                     timestamp_registered:
                       type: string
                       format: date-time
+                      description: >
+                        Time when the execution was registered at the Command and Control server.
+                        It is in date-time format, as described in RFC 3339, up to seconds resolution.
                       example: 2020-03-03T15:15:15Z
                     reports:
                       type: array
+                      description: The reports of the tests involved in the execution.
                       items:
                         $ref: '#/components/schemas/TestReport'
                   required:
@@ -794,24 +820,30 @@ paths:
                   properties:
                     session_id:
                       type: integer
+                      description: The session's identifier.
                       example: 40
                     session_start:
                       type: string
                       format: date-time
+                      description: The session's start time in RFC 3339 date-time format, up to seconds resolution.
                       example: 2020-01-01T01:01:01Z
                     session_end:
                       type: string
                       format: date-time
+                      description: The session's end time in RFC 3339 date-time format, up to seconds resolution.
                       example: 2020-01-01T02:02:02Z
                     ip:
                       type: string
-                      format: ip
+                      format: ipv4
+                      description: The IP of the node associated to the session.
                       example: 192.168.0.14
                     port:
                       type: integer
+                      description: The port of the node associated to the session.
                       example: 4900
                     platform_os_system:
                       type: string
+                      description: The type of operating system that corresponds to the node associated to the session.
                       example: Linux
                   required:
                     - session_id
@@ -841,25 +873,31 @@ paths:
                 properties:
                   session_id:
                     type: integer
+                    description: The session's identifier.
                     example: 11
                   session_start:
                     type: string
                     format: date-time
+                    description: The session's start time in RFC 3339 date-time format, up to seconds resolution.
                     example: 2020-04-02T16:20:00Z
                   session_end:
                     type: string
                     format: date-time
+                    description: The session's end time in RFC 3339 date-time format, up to seconds resolution.
                     example: 2020-04-02T17:20:00Z
                   ip:
                     type: string
+                    description: The IP of the node associated to the session.
                     example: 192.167.0.8
                   port:
                     type: integer
+                    description: The port of the node associated to the session.
                     example: 4500
                   platform_info:
                     $ref: '#/components/schemas/EnvironmentPlatformInformation'
                   total_executions:
                     type: integer
+                    description: The total amount of executions associated to the session.
                     example: 4
                 required:
                   - session_id
