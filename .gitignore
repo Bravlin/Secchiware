@@ -8,3 +8,4 @@ common/*egg-info
 __pycache__
 bin
 secchiware.db
+test_packages_cache.db

@@ -11,7 +11,6 @@ import tempfile
 import test_utils
 
 from base64 import b64encode
-from custom_collections import OrderedListOfDict
 from flask import abort, Flask, g, jsonify, request, Response
 from flask_cors import CORS
 from hashlib import sha256
@@ -23,13 +22,12 @@ from typing import Callable, Dict, Optional, Tuple
 SCRIPT_PATH = os.path.dirname(os.path.abspath(__file__))
 TESTS_PATH = os.path.join(SCRIPT_PATH, "test_sets")
 DATABASE_PATH = os.path.join(SCRIPT_PATH, "secchiware.db")
+TEST_PACKAGES_CACHE_PATH = os.path.join(SCRIPT_PATH, "test_packages_cache.db")
 
 with open(os.path.join(SCRIPT_PATH, "config.json"), "r") as config_file:
     config = json.load(config_file)
 config['NODE_SECRET'] = config['NODE_SECRET'].encode()
 config['CLIENT_SECRET'] = config['CLIENT_SECRET'].encode()
-
-available = OrderedListOfDict('name', str)
 
 
 ########################### Key recoverer functions ##########################
@@ -71,24 +69,58 @@ def node_key_recoverer(key_id: str) -> Optional[bytes]:
 
 ######################## Database related functions ##########################
 
-def init_database() -> sqlite3.Connection:
-    """Starts a connection to a SQLite database.
+def get_database() -> sqlite3.Connection:
+    """Gets a database connection.
 
-    If the database does not exists, it is created.
+    It starts one if it was not already created.
 
     Returns
     -------
     sqlite3.Connection
-        The opened connection to the database.
+        The open database connection.
     """
 
-    db = sqlite3.connect(DATABASE_PATH)
-    db.row_factory = sqlite3.Row
-    cursor = db.cursor()
-    with open(os.path.join(SCRIPT_PATH, "schema.sql")) as f:
-        cursor.executescript(f.read())
-    cursor.execute("PRAGMA foreign_keys = ON")
+    db = getattr(g, '_database', None)
+    if db is None:
+        db = g._database = sqlite3.connect(DATABASE_PATH)
+        db.row_factory = sqlite3.Row
+        db.execute("PRAGMA foreign_keys = ON")
     return db
+
+def init_database():
+    """Creates in the database the schemas needed for the application, if they
+    don't exist."""
+
+    db = get_database()
+    with open(os.path.join(SCRIPT_PATH, "schema.sql")) as f:
+        db.executescript(f.read())
+    db.commit()
+
+def get_test_packages_cache() -> sqlite3.Connection:
+    cache = getattr(g, '_test_packages_cache', None)
+    if cache is None:
+        cache = g._test_packages_cache = sqlite3.connect(
+            TEST_PACKAGES_CACHE_PATH)
+        cache.row_factory = sqlite3.Row
+    return cache
+
+def init_cache():
+    # Clears the previous cache, if it exists.
+    if os.path.isfile(TEST_PACKAGES_CACHE_PATH):
+        os.remove(TEST_PACKAGES_CACHE_PATH)
+    cache = get_test_packages_cache()
+    cursor = cache.execute(
+        """CREATE TABLE root_package
+        (
+            name TEXT PRIMARY KEY,
+            content TEXT NOT NULL
+        )
+        """)
+    cursor.executemany(
+        "INSERT INTO root_package (name, content) VALUES (?, ?)",
+        [(p['name'], json.dumps(p))
+            for p in test_utils.get_installed_test_sets("test_sets")])
+    cache.commit()  
 
 def api_parametrized_search(
         db: sqlite3.Connection,
@@ -186,22 +218,6 @@ def api_parametrized_search(
 
     query = f"{query} {where_clause} {order_by_clause} {limit_clause}"
     return db.execute(query, placeholders_values)
-
-def get_database() -> sqlite3.Connection:
-    """Gets the server instance's database connection.
-
-    It starts one if it was not already created.
-
-    Returns
-    -------
-    sqlite3.Connection
-        The server's open database connection.
-    """
-
-    db = getattr(g, '_database', None)
-    if db is None:
-        db = g._database = init_database()
-    return db
 
 
 ######################## Request check functions #############################
@@ -320,6 +336,11 @@ CORS(
         r"/test_sets/*": {}
     })
 
+@app.teardown_appcontext
+def close_connection(exception):
+    db = getattr(g, '_database', None)
+    if db is not None:
+        db.close()
 
 ############################# Error handlers #################################
 
@@ -866,12 +887,16 @@ def delete_session(session_id):
 
 @app.route("/test_sets", methods=["GET"])
 def list_available_test_sets():
-    return jsonify(available.content)
+    cache = get_test_packages_cache()
+    cursor = cache.execute("SELECT content FROM root_package ORDER BY name")
+    packages_str = ','.join([r['content'] for r in cursor.fetchall()])
+    return Response(
+        response=f"[{packages_str}]",
+        status=200,
+        mimetype="application/json")
 
 @app.route("/test_sets", methods=["PATCH"])
 def upload_test_sets():
-    global available
-
     if not request.mimetype == 'multipart/form-data':
         abort(415, description="Invalid request's content type")
     check_digest_header()
@@ -894,13 +919,18 @@ def upload_test_sets():
         test_utils.clean_package(new_pack)
         new_info.append(
             test_utils.get_installed_package(new_pack))
-    available.batch_insert(new_info)
+
+    # Updates the cache
+    cache = get_test_packages_cache()
+    cache.executemany(
+        "REPLACE INTO root_package (name, content) VALUES (?, ?)",
+        [(n['name'], json.dumps(n)) for n in new_info])
+    cache.commit()
+
     return Response(status=204, mimetype="application/json")
 
 @app.route("/test_sets/<package>", methods=["DELETE"])
 def delete_package(package):
-    global available
-
     check_authorization_header(client_key_recoverer)
 
     package_path = os.path.join(TESTS_PATH, package)
@@ -908,7 +938,13 @@ def delete_package(package):
         abort(404, description=f"Package '{package}' not found")
 
     shutil.rmtree(package_path)
-    available.delete(package)
+    test_utils.clean_package(package)
+    
+    # Deletes the entry from the cache
+    cache = get_test_packages_cache()
+    cache.execute("DELETE FROM root_package WHERE name = ?", (package,))
+    cache.commit()
+
     return Response(status=204, mimetype="application/json")
 
 ########################## Additional functions ##############################
@@ -924,41 +960,40 @@ def exit_gracefully(sig, frame):
 
     with app.app_context():
         db = get_database() 
-    cursor = db.execute(
-        """SELECT env_ip, env_port
-        FROM session
-        WHERE session_end IS NULL""")
-
-    environments = cursor.fetchall()
-    if environments:
-        signature = signatures.new_signature(
-            config['NODE_SECRET'],
-            "DELETE",
-            "/")
-        authorization_content = (
-            signatures.new_authorization_header("C2", signature))
-
-        for env in environments:
-            ip = env['env_ip']
-            port = env['env_port']
-            try:
-                resp = rq.delete(
-                    f"http://{ip}:{port}/",
-                    headers={'Authorization': authorization_content})
-            except rq.exceptions.ConnectionError:
-                print(f"Node at {ip}:{port} could not be reached.")
-            else:
-                if resp.status_code != 204:
-                    print(f"Unexpected responde from node at {ip}:{port}.")
-                else:
-                    print(f"Node at {ip}:{port} reached.")
-
-        cursor.execute(
-            """UPDATE session
-            SET session_end = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+        cursor = db.execute(
+            """SELECT env_ip, env_port
+            FROM session
             WHERE session_end IS NULL""")
-        db.commit()
-        db.close()
+
+        environments = cursor.fetchall()
+        if environments:
+            signature = signatures.new_signature(
+                config['NODE_SECRET'],
+                "DELETE",
+                "/")
+            authorization_content = (
+                signatures.new_authorization_header("C2", signature))
+
+            for env in environments:
+                ip = env['env_ip']
+                port = env['env_port']
+                try:
+                    resp = rq.delete(
+                        f"http://{ip}:{port}/",
+                        headers={'Authorization': authorization_content})
+                except rq.exceptions.ConnectionError:
+                    print(f"Node at {ip}:{port} could not be reached.")
+                else:
+                    if resp.status_code != 204:
+                        print(f"Unexpected response from node at {ip}:{port}.")
+                    else:
+                        print(f"Node at {ip}:{port} reached.")
+
+            cursor.execute(
+                """UPDATE session
+                SET session_end = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+                WHERE session_end IS NULL""")
+            db.commit()
     
     print("Exiting...")
     sys.exit()
@@ -970,10 +1005,9 @@ if not os.path.isdir(TESTS_PATH):
     os.mkdir(TESTS_PATH)
     open(os.path.join(TESTS_PATH, "__init__.py"), "w").close()
 
-try:
-    available.content = test_utils.get_installed_test_sets("test_sets")
-except Exception as e:
-    print(str(e))
+with app.app_context():
+    init_database()
+    init_cache()
 
 signal.signal(signal.SIGTERM, exit_gracefully)
 signal.signal(signal.SIGINT, exit_gracefully)

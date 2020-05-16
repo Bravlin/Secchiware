@@ -194,6 +194,7 @@ def delete_package(package):
         abort(404, description="Package not found")
 
     shutil.rmtree(package_path)
+    test_utils.clean_package(package)
     installed.delete(package)
     return Response(status=204, mimetype="application/json")
 
@@ -358,7 +359,7 @@ if connect_to_c2():
         print(str(e))
 
     if __name__ == "__main__":
-        app.run(host=config['IP'], port=config['PORT'])
+        app.run(host=config['IP'], port=config['PORT'], threaded=False)
 else:
     print("Connection refused.\n\nExecuting installed tests...\n\n")
     tests = test_utils.TestSetCollection("test_sets")

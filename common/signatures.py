@@ -44,9 +44,10 @@ def new_signature(
         by a newline character ('\\n').
     5-  For every header specified, appends the following expression:
         "{header_name}: {header_value}\\n", where header_name is the key of the
-        header in lowercase and header_value is its corresponding value. For the
-        last header the trailing newline character is omitted.
-    6-  Calculates the digest of the generated string using HMAC-SHA256 and
+        header in lowercase and header_value is its corresponding value.
+    6-  For the last line of the generated string, the trailing newline
+        character must be omitted.
+    7-  Calculates the digest of the generated string using HMAC-SHA256 and
         encodes it in base 64 to obtain the signature.
 
     Parameters

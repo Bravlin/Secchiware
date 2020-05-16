@@ -446,7 +446,7 @@ def get_installed_package(package_name: str) -> dict:
     """
 
     installed = {
-        'name': package_name.split(".")[-1], # Basename only.
+        'name': package_name.split(".")[-1]
     }
     package = import_module(package_name)
     modules_list = []
