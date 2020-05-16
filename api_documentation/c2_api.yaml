@@ -276,32 +276,30 @@ paths:
             application/json:
               schema:
                 type: object
-                description: Each key is a string containing an IP.
-                additionalProperties:
-                  type: object
-                  description: Each key represents the port of an environment at the corresponding IP.
-                  additionalProperties:
-                    type: object
-                    properties:
-                      session_id:
-                        type: integer
-                        description: The identifier of the session.
-                      session_start:
-                        type: string
-                        format: date-time
-                        description: The start time of the session as a RFC 3339 date-time, up to second resolution.
-                    required:
-                      - session_id
-                      - session_start
-              example:
-                192.168.0.14:
-                    5100:
-                      session_id: 1
-                      session_start: 2020-04-02T23:58:44Z
-                192.168.0.19:
-                    4900:
-                      session_id: 2
-                      session_start: 2020-04-03T00:02:06Z
+                properties:
+                  session_id:
+                    type: integer
+                    description: The identifier of the session of the active environment.
+                    example: 2
+                  ip:
+                    type: string
+                    format: ipv4
+                    description: The ip from where the environment is listening for requests.
+                    example: 192.168.0.14
+                  port:
+                    type: integer
+                    description: The port from where the environment is listening for requests.
+                    example: 5100
+                  session_start:
+                    type: string
+                    format: date-time
+                    description: The start time of the session as a RFC 3339 date-time, up to seconds resolution.
+                    example: 2020-04-02T23:58:44Z
+                required:
+                  - session_id
+                  - ip
+                  - port
+                  - session_start
     post:
       summary: Endpoint that allows a node to register itself.
       parameters:

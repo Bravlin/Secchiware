@@ -25,14 +25,16 @@ class MonitoringSet(TestSet):
     def wireshark_running(self) -> TestResult:
         pgrep = os.popen("pgrep wireshark")
         pids = pgrep.read()
-        if not pgrep.close() is None:
+        exit_code = pgrep.close()
+        if not exit_code is None:
+            if exit_code == 256:
+                return TestSet.TEST_PASSED
             return TestSet.TEST_INCONCLUSIVE
-        if pids:
-            additional_info = {
-                'PIDs found:': [int(pid) for pid in pids.split("\n")[:-1]]
-            }
-            return TestSet.TEST_FAILED, additional_info
-        return TestSet.TEST_PASSED
+        # pgrep exits with code 0 only if there was a match.
+        additional_info = {
+            'PIDs found:': [int(pid) for pid in pids.split("\n")[:-1]]
+        }
+        return TestSet.TEST_FAILED, additional_info
 
 
 class HooksAndInjectedLibrariesSet(TestSet):

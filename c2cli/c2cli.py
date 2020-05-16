@@ -132,12 +132,10 @@ def lsenv():
     except requests.exceptions.ConnectionError:
         print("Connection refused.")
     else:
-        envs = resp.json()
-        for ip, ports in envs.items():
-            for port, content in ports.items():
-                print(
-                    f"\n{ip}:{port}\nsession: {content['session_id']}\n"
-                    f"start: {content['session_start']}\n")
+        if resp.status_code != 200:
+            print("Unexpected response from Command and Control Sever.")
+        else:
+            print(json.dumps(resp.json(), indent=2))
 
 @main.command(
     "sessions_search",

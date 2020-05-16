@@ -31,8 +31,6 @@ config['CLIENT_SECRET'] = config['CLIENT_SECRET'].encode()
 
 available = OrderedListOfDict('name', str)
 
-environments = {}
-
 
 ########################### Key recoverer functions ##########################
 
@@ -87,48 +85,8 @@ def init_database() -> sqlite3.Connection:
     db = sqlite3.connect(DATABASE_PATH)
     db.row_factory = sqlite3.Row
     cursor = db.cursor()
-    cursor.execute(
-        """CREATE TABLE IF NOT EXISTS session
-        (id_session INTEGER PRIMARY KEY,
-        session_start TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
-        session_end INTEGER,
-        env_ip TEXT NOT NULL,
-        env_port INTEGER NOT NULL,
-        env_platform TEXT NOT NULL,
-        env_node TEXT NOT NULL,
-        env_os_system TEXT NOT NULL,
-        env_os_release TEXT NOT NULL,
-        env_os_version TEXT NOT NULL,
-        env_hw_machine TEXT NOT NULL,
-        env_hw_processor TEXT NOT NULL,
-        env_py_build_no TEXT NOT NULL,
-        env_py_build_date TEXT NOT NULL,
-        env_py_compiler TEXT NOT NULL,
-        env_py_implementation TEXT NOT NULL,
-        env_py_version TEXT NOT NULL)""")
-    cursor.execute(
-        """CREATE TABLE IF NOT EXISTS execution
-        (id_execution INTEGER PRIMARY KEY,
-        fk_session INTEGER NOT NULL,
-        timestamp_registered INTEGER DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
-        CONSTRAINT execution_session
-            FOREIGN KEY (fk_session)
-            REFERENCES session(id_session)
-            ON DELETE CASCADE)""")
-    cursor.execute(
-        """CREATE TABLE IF NOT EXISTS report
-        (id_report INTEGER PRIMARY KEY,
-        fk_execution INTEGER NOT NULL,
-        test_name TEXT NOT NULL,
-        test_description TEXT NOT NULL,
-        timestamp_start TEXT NOT NULL,
-        timestamp_end TEXT NOT NULL,
-        result_code INTEGER NOT NULL,
-        additional_info TEXT,
-        CONSTRAINT report_execution
-            FOREIGN KEY (fk_execution)
-            REFERENCES execution(id_execution)
-            ON DELETE CASCADE)""")
+    with open(os.path.join(SCRIPT_PATH, "schema.sql")) as f:
+        cursor.executescript(f.read())
     cursor.execute("PRAGMA foreign_keys = ON")
     return db
 
@@ -264,9 +222,15 @@ def check_registered(ip: str, port: int):
         There is no environment registered with the given ip and port.
     """
 
-    if not (ip in environments and port in environments[ip]):
+    db = get_database()
+    cursor = db.execute(
+        """SELECT id_session
+        FROM session
+        WHERE env_ip = ? AND env_port = ? AND session_end IS NULL""",
+        (ip, port))
+    if cursor.fetchone() is None:
         abort(404,
-            description=f"No environment registered for {ip}:{port}")
+            description=f"No environment registered at {ip}:{port}")
 
 def check_is_json():
     """Verifies that the current request's MIME type is 'application/json'.
@@ -396,6 +360,23 @@ def gateway_timeout(e):
 
 @app.route("/environments", methods=["GET"])
 def list_environments():
+    db = get_database()
+    cursor = db.execute(
+        """SELECT id_session, session_start, env_ip, env_port
+        FROM session
+        WHERE session_end IS NULL""")
+    
+    environments = []
+    env = cursor.fetchone()
+    while env:
+        environments.append({
+            'session_id': env['id_session'],
+            'ip': env['env_ip'],
+            'port': env['env_port'],
+            'session_start': env['session_start']
+        })
+        env = cursor.fetchone()
+
     return jsonify(environments)
 
 @app.route("/environments", methods=["POST"])
@@ -411,6 +392,25 @@ def add_environment():
     ip = request.json['ip']
     port = request.json['port']
     platform_info = request.json['platform_info']
+
+    db = get_database()
+
+    # Checks if there is an active session associated to the incoming ip and
+    # port already.
+    cursor = db.execute(
+        """SELECT id_session
+        FROM session
+        WHERE env_ip = ? AND env_port = ? AND session_end IS NULL""",
+        (ip, port))
+    previous_session = cursor.fetchone()
+    if previous_session:
+        # If there is such session, it is assumed that its corresponding
+        # environment was not shut down properly.
+        cursor.execute(
+            """UPDATE session
+            SET session_end = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+            WHERE id_session = ?""",
+            (previous_session['id_session'],))
 
     to_insert = (
         ip,
@@ -428,56 +428,41 @@ def add_environment():
         platform_info['python']['implementation'],
         platform_info['python']['version']
     )
-
-    db = get_database()
-    cursor = db.execute(
+    cursor.execute(
         """INSERT INTO session
-        (env_ip, env_port, env_platform, env_node, env_os_system,
-        env_os_release, env_os_version, env_hw_machine,
-        env_hw_processor, env_py_build_no, env_py_build_date,
-        env_py_compiler, env_py_implementation, env_py_version)
+        (
+            env_ip, env_port, env_platform, env_node, env_os_system,
+            env_os_release, env_os_version, env_hw_machine,
+            env_hw_processor, env_py_build_no, env_py_build_date,
+            env_py_compiler, env_py_implementation, env_py_version
+        )
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         to_insert)
-    db.commit()
 
-    if not ip in environments:
-        environments[ip] = {}
-    environments[ip][port] = {
-        'session_id': cursor.lastrowid,
-        'session_start': cursor.execute(
-            """SELECT session_start
-            FROM session
-            WHERE id_session = ?""",
-            (cursor.lastrowid,)).fetchone()[0]
-    }
+    db.commit()
 
     return Response(status=204, mimetype="application/json")
 
 @app.route("/environments/<ip>/<int:port>", methods=["DELETE"])
 def remove_environment(ip, port):
-    global environments
-
     check_authorization_header(node_key_recoverer)
-    check_registered(ip, port)
 
     db = get_database()
-    db.execute(
+    cursor = db.execute(
         """UPDATE session
         SET session_end = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
-        WHERE id_session = ?""",
-        (environments[ip][port]['session_id'],))
+        WHERE env_ip = ? AND env_port = ? AND session_end IS NULL""",
+        (ip, port))
+
+    if cursor.rowcount == 0:
+        abort(404,
+            description=f"No environment registered at {ip}:{port}")
+
     db.commit()
-    
-    del environments[ip][port]
-    if not environments[ip]:
-        del environments[ip]
-    
     return Response(status=204, mimetype="application/json")
 
 @app.route("/environments/<ip>/<int:port>/info", methods=["GET"])
 def get_environment_info(ip, port):
-    check_registered(ip, port)
-
     db = get_database()
     row = db.execute(
         """SELECT env_platform, env_node, env_os_system, env_os_release,
@@ -485,8 +470,12 @@ def get_environment_info(ip, port):
         env_py_build_date, env_py_compiler, env_py_implementation,
         env_py_version
         FROM session
-        WHERE id_session = ?""",
-        (environments[ip][port]['session_id'],)).fetchone()
+        WHERE env_ip = ? AND env_port = ? AND session_end IS NULL""",
+        (ip, port)).fetchone()
+
+    if row is None:
+        abort(404,
+            description=f"No environment registered at {ip}:{port}")
 
     info = {
         'platform': row['env_platform'],
@@ -596,7 +585,17 @@ def delete_installed_package(ip, port, package):
 
 @app.route("/environments/<ip>/<int:port>/reports", methods=["GET"])
 def execute_tests(ip, port):
-    check_registered(ip, port)
+    db = get_database()
+    cursor = db.execute(
+        """SELECT id_session
+        FROM session
+        WHERE env_ip = ? AND env_port = ? AND session_end IS NULL""",
+        (ip, port))
+    row = cursor.fetchone()
+
+    if row is None:
+        abort(404,
+            description=f"No environment registered at {ip}:{port}")
     
     url = f"http://{ip}:{port}/reports"
     if request.args:
@@ -612,7 +611,7 @@ def execute_tests(ip, port):
     except rq.exceptions.ConnectionError:
         abort(504,
             description="The requested environment could not be reached")
-        
+
     if resp.status_code == 400:
         abort(500,
             description="Something went wrong when handling the request")
@@ -622,12 +621,12 @@ def execute_tests(ip, port):
             description="A specified entity does not exist in the node.")
     if resp.status_code != 200:
         abort(502, description=f"Unexpected response from node at {ip}:{port}")
-
-    db = get_database()
-    cursor = db.execute(
+    
+    cursor.execute(
         "INSERT INTO execution (fk_session) VALUES (?)",
-        (environments[ip][port]['session_id'],))
+        (row['id_session'],))
     execution_id = cursor.lastrowid
+
     to_insert = []
     for report in resp.json():
         additional_info = report.get('additional_info')
@@ -646,8 +645,8 @@ def execute_tests(ip, port):
         timestamp_start, timestamp_end, result_code, additional_info)
         VALUES (?, ?, ?, ?, ?, ?, ?)""",
         to_insert)
-    db.commit()
 
+    db.commit()
     return jsonify(resp.json())
 
 @app.route("/executions", methods=["GET"])
@@ -923,38 +922,41 @@ def exit_gracefully(sig, frame):
 
     print("Starting exit...")
 
-    if environments:
-        sessions = []
+    with app.app_context():
+        db = get_database() 
+    cursor = db.execute(
+        """SELECT env_ip, env_port
+        FROM session
+        WHERE session_end IS NULL""")
 
+    environments = cursor.fetchall()
+    if environments:
         signature = signatures.new_signature(
             config['NODE_SECRET'],
             "DELETE",
             "/")
-        authorization_content =\
-            signatures.new_authorization_header("C2", signature)
+        authorization_content = (
+            signatures.new_authorization_header("C2", signature))
 
-        for ip, host in environments.items():
-            for port, node_info in host.items():
-                sessions.append((node_info['session_id'],))
-
-                try:
-                    resp = rq.delete(
-                        f"http://{ip}:{port}/",
-                        headers={'Authorization': authorization_content})
-                except rq.exceptions.ConnectionError:
-                    print(f"Node at {ip}:{port} could not be reached.")
+        for env in environments:
+            ip = env['env_ip']
+            port = env['env_port']
+            try:
+                resp = rq.delete(
+                    f"http://{ip}:{port}/",
+                    headers={'Authorization': authorization_content})
+            except rq.exceptions.ConnectionError:
+                print(f"Node at {ip}:{port} could not be reached.")
+            else:
+                if resp.status_code != 204:
+                    print(f"Unexpected responde from node at {ip}:{port}.")
                 else:
-                    if resp.status_code != 204:
-                        print(f"Unexpected responde from node at {ip}:{port}.")
-                    else:
-                        print(f"Node at {ip}:{port} reached.")
+                    print(f"Node at {ip}:{port} reached.")
 
-        db = sqlite3.connect(DATABASE_PATH)
-        db.executemany(
+        cursor.execute(
             """UPDATE session
             SET session_end = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
-            WHERE id_session = ?""",
-            sessions)
+            WHERE session_end IS NULL""")
         db.commit()
         db.close()
     
