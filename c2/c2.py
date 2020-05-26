@@ -330,7 +330,7 @@ CORS(
     app,
     resources={
         r"/environments": {'methods': "GET"},
-        r"/environments/[^/]+/[^/]+/+": {},
+        r"/environments/([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]+/+": {},
         r"/executions/*": {},
         r"/sessions/*": {},
         r"/test_sets/*": {}

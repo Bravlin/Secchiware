@@ -51,7 +51,7 @@ from importlib import import_module
 from datetime import datetime
 from functools import wraps
 from pkgutil import iter_modules, walk_packages
-from typing import Any, BinaryIO, Callable, List, Tuple, Union
+from typing import Any, BinaryIO, Callable, List, Set, Tuple, Union
 
 
 ############################ Typing definitions ##############################
@@ -244,34 +244,34 @@ class TestSet(ABC):
 
 
 class TestSetCollection():
-    """Loads and contains a collection of instances of classes extended from
-    TestSet.
+    """Loads and contains a collection of classes extended from TestSet.
     
     Instance attributes
     -------------------
     tests_root: str
         The name of the root package use to resolve packages, modules and
         classes names.
-    test_sets: List[TestSet]
-        A list of instances of TestSet obtained through loading certain
+    test_sets: Set[Callable]
+        A set of subclasses of TestSet obtained through loading certain
         specified packages, modules or classes.
 
     Instance methods
     ----------------
     load_entities(packages: List[str], modules: List[str], 
     test_sets: List[str]) -> None
-        Recovers all test sets from the given entities, instantiates them and
-        refreshes the collection with them.
+        Recovers all test sets from the given entities and refreshes the
+        collection with them.
     load_package(package: str) -> None:
-        Looks for all the test sets in the given package and its subpackages,
-        instantiates them and adds them to the collection.
+        Looks for all the test sets in the given package and its subpackages
+        and adds them to the collection.
     load_module(module: str) -> None:
-        Instantiates the classes extended from TestSet in the given module and
+        Recovers the classes extended from TestSet in the given module and
         adds them to the collection.
     load_test_set(module: str, test_set: str) -> None:
-        Instantiates the given test set class and adds it to the collection.
+        Recovers the given test set class and adds it to the collection.
     run_all_tests() -> List[dict]:
-        Executes all the test sets in the collection.
+        Instantiates all the test sets in the collection and executes its
+        corresponding tests.
     """
 
     def __init__(self,
@@ -300,7 +300,7 @@ class TestSetCollection():
         if packages or modules or test_sets:
             self.load_entities(packages, modules, test_sets)
         else:
-            self.test_sets: List[TestSet] = []
+            self.test_sets: Set[Callable] = set()
             self.load_package(self.tests_root)
 
     def load_entities(
@@ -308,8 +308,8 @@ class TestSetCollection():
             packages: List[str] = [],
             modules: List[str] = [],
             test_sets: List[str] = []) -> None:
-        """Recovers all test sets from the given entities, instantiates them
-        and refreshes the collection with them.
+        """ Recovers all test sets from the given entities and refreshes the
+        collection with them.
         
         Parameters
         ----------
@@ -324,7 +324,7 @@ class TestSetCollection():
             extended from TestSet to be loaded.
         """
 
-        self.test_sets: List[TestSet] = []
+        self.test_sets = set()
         
         for package in packages:
             self.load_package(f"{self.tests_root}.{package}")
@@ -339,7 +339,7 @@ class TestSetCollection():
 
     def load_package(self, package: str) -> None:
         """Looks for all the test sets in the given package and its
-        subpackages, instantiates them and adds them to the collection.
+        subpackages and adds them to the collection.
         
         Parameters
         ----------
@@ -359,8 +359,8 @@ class TestSetCollection():
                 self.load_module(name)
 
     def load_module(self, module: str) -> None:
-        """Instantiates the classes extended from TestSet in the given module
-        and adds them to the collection.
+        """Recovers the classes extended from TestSet in the given module and
+        adds them to the collection.
         
         Parameters
         ----------
@@ -371,10 +371,10 @@ class TestSetCollection():
         mod = import_module(module)
         classes = inspect.getmembers(mod, TestSet.is_strict_subclass)
         for _, c in classes:
-            self.test_sets.append(c())
+            self.test_sets.add(c)
 
     def load_test_set(self, module: str, test_set: str) -> None:
-        """Instantiates the given test set class and adds it to the collection.
+        """Recovers the given test set class and adds it to the collection.
         
         Parameters
         ----------
@@ -393,12 +393,13 @@ class TestSetCollection():
         mod = import_module(module)
         c = getattr(mod, test_set)
         if TestSet.is_strict_subclass(c):
-            self.test_sets.append(c())
+            self.test_sets.add(c)
         else:
             raise ValueError(f"{test_set} is not a valid class name.")
 
     def run_all_tests(self) -> List[dict]:
-        """Executes all the test sets in the collection.
+        """Instantiates all the test sets in the collection and executes its
+        corresponding tests.
 
         Returns
         -------
@@ -410,7 +411,7 @@ class TestSetCollection():
 
         results = []
         for ts in self.test_sets:
-            results += ts.run()
+            results += ts().run()
         return results
 
 

@@ -32,7 +32,7 @@ class MonitoringSet(TestSet):
             return TestSet.TEST_INCONCLUSIVE
         # pgrep exits with code 0 only if there was a match.
         additional_info = {
-            'PIDs found:': [int(pid) for pid in pids.split("\n")[:-1]]
+            'PIDs found': [int(pid) for pid in pids.split("\n")[:-1]]
         }
         return TestSet.TEST_FAILED, additional_info
 

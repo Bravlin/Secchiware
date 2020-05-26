@@ -4,17 +4,17 @@ import os
 from test_utils import TestResult, TestSet
 
 
-dll = None
-
 # Loads the DLL used by all TestSets of the module
 def getWindowsAPIDLL():
     global dll
 
-    if dll is None:
+    try:
+        return dll
+    except NameError:
         package_dir = os.path.dirname(os.path.abspath(__file__))
         shared_bin_dir = os.path.join(package_dir, "shared", "bin")
         dll = ctypes.WinDLL(os.path.join(shared_bin_dir, "windows_api.dll"))
-    return dll
+        return dll
 
 
 class WindowsAPIDebuggerSet(TestSet):
