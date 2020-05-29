@@ -1,6 +1,7 @@
 import hmac
 import json
 import os
+import redis
 import requests as rq
 import signatures
 import shutil
@@ -22,7 +23,6 @@ from typing import Callable, Dict, Optional, Tuple
 SCRIPT_PATH = os.path.dirname(os.path.abspath(__file__))
 TESTS_PATH = os.path.join(SCRIPT_PATH, "test_sets")
 DATABASE_PATH = os.path.join(SCRIPT_PATH, "secchiware.db")
-TEST_PACKAGES_CACHE_PATH = os.path.join(SCRIPT_PATH, "test_packages_cache.db")
 
 with open(os.path.join(SCRIPT_PATH, "config.json"), "r") as config_file:
     config = json.load(config_file)
@@ -96,31 +96,23 @@ def init_database():
         db.executescript(f.read())
     db.commit()
 
-def get_test_packages_cache() -> sqlite3.Connection:
-    cache = getattr(g, '_test_packages_cache', None)
-    if cache is None:
-        cache = g._test_packages_cache = sqlite3.connect(
-            TEST_PACKAGES_CACHE_PATH)
-        cache.row_factory = sqlite3.Row
-    return cache
+def get_memory_storage() -> redis.StrictRedis:
+    memory_storage = getattr(g, '_memory_storage', None)
+    if memory_storage is None:
+        memory_storage = redis.StrictRedis(
+            decode_responses=True,
+            charset="utf-8")
+        g._memory_storage = memory_storage
+    return memory_storage
 
-def init_cache():
-    # Clears the previous cache, if it exists.
-    if os.path.isfile(TEST_PACKAGES_CACHE_PATH):
-        os.remove(TEST_PACKAGES_CACHE_PATH)
-    cache = get_test_packages_cache()
-    cursor = cache.execute(
-        """CREATE TABLE root_package
-        (
-            name TEXT PRIMARY KEY,
-            content TEXT NOT NULL
-        )
-        """)
-    cursor.executemany(
-        "INSERT INTO root_package (name, content) VALUES (?, ?)",
-        [(p['name'], json.dumps(p))
-            for p in test_utils.get_installed_test_sets("test_sets")])
-    cache.commit()  
+def init_memory_storage():
+    memory_storage = get_memory_storage()
+    memory_storage.flushdb()
+    pipe = memory_storage.pipeline()
+    for p in test_utils.get_installed_test_sets("test_sets"):
+        pipe.set(f"repository:{p['name']}", json.dumps(p))
+        pipe.zadd("repository_index", {p['name']: 0})
+    pipe.execute()
 
 def api_parametrized_search(
         db: sqlite3.Connection,
@@ -462,6 +454,11 @@ def add_environment():
 
     db.commit()
 
+    get_memory_storage().hset(
+        f"environments:{ip}:{port}",
+        "installed_cached",
+        "0")
+
     return Response(status=204, mimetype="application/json")
 
 @app.route("/environments/<ip>/<int:port>", methods=["DELETE"])
@@ -480,6 +477,15 @@ def remove_environment(ip, port):
             description=f"No environment registered at {ip}:{port}")
 
     db.commit()
+
+    # Clears cache.
+    environment_key = f"environments:{ip}:{port}"
+    memory_storage = get_memory_storage()
+    pipe = memory_storage.pipeline()
+    pipe.delete(environment_key)
+    pipe.delete(f"{environment_key}:installed_index")
+    pipe.execute()
+
     return Response(status=204, mimetype="application/json")
 
 @app.route("/environments/<ip>/<int:port>/info", methods=["GET"])
@@ -524,15 +530,50 @@ def get_environment_info(ip, port):
 def list_installed_test_sets(ip, port):
     check_registered(ip, port)
 
-    try:
-        resp = rq.get(f"http://{ip}:{port}/test_sets")
-    except rq.exceptions.ConnectionError:
-        abort(504,
-            description="The requested environment could not be reached")
+    memory_storage = get_memory_storage()
+    environment_key = f"environments:{ip}:{port}"
+    installed_cached = memory_storage.hget(
+        environment_key,
+        "installed_cached")
+    if installed_cached == "1":
+        packages_names = memory_storage.zrange(
+            f"{environment_key}:installed_index",
+            0,
+            -1)
+        installed_str = ",".join(memory_storage.hmget(
+            environment_key,
+            *[f"installed:{p}" for p in packages_names]))
+    else:
+        try:
+            resp = rq.get(f"http://{ip}:{port}/test_sets")
+        except rq.exceptions.ConnectionError:
+            abort(504,
+                description="The requested environment could not be reached")
 
-    if resp.status_code == 200:
-        return jsonify(resp.json())
-    abort(502, description=f"Unexpected response from node at {ip}:{port}")
+        if resp.status_code != 200:
+            abort(
+                502,
+                description=f"Unexpected response from node at {ip}:{port}")
+
+        installed_str = resp.text
+
+        # Saves the node's response in the cache.
+        pipe = memory_storage.pipeline()
+        for p in json.loads(installed_str):
+            pipe.hset(
+                environment_key,
+                f"installed:{p['name']}",
+                json.dumps(p))
+            pipe.zadd(
+                f"{environment_key}:installed_index",
+                {p['name']: 0})
+        pipe.hset(environment_key, "installed_cached", "1")
+        pipe.execute()
+
+    return Response(
+        response=f"[{installed_str}]",
+        status=200,
+        mimetype="application/json")
 
 @app.route("/environments/<ip>/<int:port>/installed", methods=["PATCH"])
 def install_packages(ip, port):
@@ -562,8 +603,8 @@ def install_packages(ip, port):
             "/test_sets",
             signature_headers=headers,
             header_recoverer=lambda h: prepared.headers.get(h))
-        prepared.headers['Authorization'] =\
-            signatures.new_authorization_header("C2", signature, headers)
+        prepared.headers['Authorization'] = (
+            signatures.new_authorization_header("C2", signature, headers))
 
         resp = rq.Session().send(prepared)
     except ValueError as e:
@@ -573,13 +614,33 @@ def install_packages(ip, port):
             description="The requested environment could not be reached")
     
     if resp.status_code == 204:
+        environment_key = f"environments:{ip}:{port}"
+        memory_storage = get_memory_storage()
+        installed_cached = memory_storage.hget(
+            environment_key,
+            "installed_cached")
+        if installed_cached == "1":
+            # Updates cache if it exists.
+            pipe = memory_storage.pipeline()
+            for pack in packages:
+                pipe.hset(
+                    environment_key,
+                    f"installed:{pack}",
+                    memory_storage.get(f"repository:{pack}"))
+                pipe.zadd(f"{environment_key}:installed_index", {pack: 0})
+            pipe.execute()
+
         return Response(status=204, mimetype="application/json")
+
     if resp.status_code in {400, 401, 415}:
         abort(500,
             description="Something went wrong when handling the request")
+
     abort(502, description=f"Unexpected response from node at {ip}:{port}")
 
-@app.route("/environments/<ip>/<int:port>/installed/<package>", methods=["DELETE"])
+@app.route(
+    "/environments/<ip>/<int:port>/installed/<package>",
+    methods=["DELETE"])
 def delete_installed_package(ip, port, package):
     check_authorization_header(client_key_recoverer)
     check_registered(ip, port)
@@ -599,9 +660,23 @@ def delete_installed_package(ip, port, package):
             description="The requested environment could not be reached")
 
     if resp.status_code == 204:
+        environment_key = f"environments:{ip}:{port}"
+        memory_storage = get_memory_storage()
+        installed_cached = memory_storage.hget(
+            environment_key,
+            "installed_cached")
+        if installed_cached == "1":
+            # Updates cache if it exists.
+            pipe = memory_storage.pipeline()
+            pipe.hdel(environment_key, f"installed:{package}")
+            pipe.zrem(f"{environment_key}:installed_index", package)
+            pipe.execute()
+
         return Response(status=204, mimetype="application/json")
+
     if resp.status_code in {401, 404}:
         return abort(404, description=f"'{package}' not found at {ip}:{port}")
+
     abort(502, description=f"Unexpected response from node at {ip}:{port}")
 
 @app.route("/environments/<ip>/<int:port>/reports", methods=["GET"])
@@ -887,11 +962,12 @@ def delete_session(session_id):
 
 @app.route("/test_sets", methods=["GET"])
 def list_available_test_sets():
-    cache = get_test_packages_cache()
-    cursor = cache.execute("SELECT content FROM root_package ORDER BY name")
-    packages_str = ','.join([r['content'] for r in cursor.fetchall()])
+    memory_storage = get_memory_storage()
+    packages_names = memory_storage.zrange("repository_index", 0, -1)
+    packages_content = memory_storage.mget(
+        *[f"repository:{p}" for p in packages_names])
     return Response(
-        response=f"[{packages_str}]",
+        response=f"[{','.join(packages_content)}]",
         status=200,
         mimetype="application/json")
 
@@ -921,11 +997,11 @@ def upload_test_sets():
             test_utils.get_installed_package(new_pack))
 
     # Updates the cache
-    cache = get_test_packages_cache()
-    cache.executemany(
-        "REPLACE INTO root_package (name, content) VALUES (?, ?)",
-        [(n['name'], json.dumps(n)) for n in new_info])
-    cache.commit()
+    pipe = get_memory_storage().pipeline()
+    for ni in new_info:
+        pipe.set(f"repository:{ni['name']}", json.dumps(ni))
+        pipe.zadd("repository_index", {ni['name']: 0})
+    pipe.execute()
 
     return Response(status=204, mimetype="application/json")
 
@@ -941,9 +1017,10 @@ def delete_package(package):
     test_utils.clean_package(package)
     
     # Deletes the entry from the cache
-    cache = get_test_packages_cache()
-    cache.execute("DELETE FROM root_package WHERE name = ?", (package,))
-    cache.commit()
+    pipe = get_memory_storage().pipeline()
+    pipe.delete(f"repository:{package}")
+    pipe.zrem("repository_index", package)
+    pipe.execute()
 
     return Response(status=204, mimetype="application/json")
 
@@ -959,6 +1036,8 @@ def exit_gracefully(sig, frame):
     print("Starting exit...")
 
     with app.app_context():
+        get_memory_storage().flushdb(asynchronous=True)
+
         db = get_database() 
         cursor = db.execute(
             """SELECT env_ip, env_port
@@ -1007,7 +1086,7 @@ if not os.path.isdir(TESTS_PATH):
 
 with app.app_context():
     init_database()
-    init_cache()
+    init_memory_storage()
 
 signal.signal(signal.SIGTERM, exit_gracefully)
 signal.signal(signal.SIGINT, exit_gracefully)

@@ -12,7 +12,6 @@ import time
 
 from base64 import b64encode
 from concurrent.futures import ThreadPoolExecutor
-from custom_collections import OrderedListOfDict
 from flask import abort, Flask, jsonify, request, Response
 from hashlib import sha256
 
@@ -25,8 +24,6 @@ TESTS_PATH = os.path.join(SCRIPT_PATH, "test_sets")
 with open(os.path.join(SCRIPT_PATH, "config.json"), "r") as config_file:
     config = json.load(config_file)
 config['C2_SECRET'] = config['C2_SECRET'].encode()
-
-installed = OrderedListOfDict('name', str)
 
 
 ######################## Request check functions #############################
@@ -144,12 +141,10 @@ def execute_tests():
 
 @app.route("/test_sets", methods=["GET"])
 def list_installed_test_sets():
-    return jsonify(installed.content)
+    return jsonify(test_utils.get_installed_test_sets("test_sets"))
 
 @app.route("/test_sets", methods=["PATCH"])
 def install_test_sets():
-    global installed
-    
     if not request.mimetype == 'multipart/form-data':
         abort(415, description="Invalid request's content type")
 
@@ -173,20 +168,14 @@ def install_test_sets():
         print(str(e))
         abort(400, description="Invalid request's content")
     
-    new_info = []
     for new_pack in new_packages:
-        new_pack = f"test_sets.{new_pack}"
-        # If it is a new version, the next sentence removes the old one
-        test_utils.clean_package(new_pack)
-        new_info.append(
-            test_utils.get_installed_package(new_pack))
-    installed.batch_insert(new_info)
+        # If it is a new version, the next sentence removes the old one.
+        test_utils.clean_package(f"test_sets.{new_pack}")
+
     return Response(status=204, mimetype="application/json")
 
 @app.route("/test_sets/<package>", methods=["DELETE"])
 def delete_package(package):
-    global installed
-
     check_authorization_header()
 
     package_path = os.path.join(TESTS_PATH, package)
@@ -195,7 +184,6 @@ def delete_package(package):
 
     shutil.rmtree(package_path)
     test_utils.clean_package(package)
-    installed.delete(package)
     return Response(status=204, mimetype="application/json")
 
 
@@ -352,11 +340,6 @@ if connect_to_c2():
 
     signal.signal(signal.SIGTERM, exit_gracefully)
     signal.signal(signal.SIGINT, exit_gracefully)
-
-    try:
-        installed.content = test_utils.get_installed_test_sets("test_sets")
-    except Exception as e:
-        print(str(e))
 
     if __name__ == "__main__":
         app.run(host=config['IP'], port=config['PORT'], threaded=False)
