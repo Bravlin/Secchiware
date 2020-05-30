@@ -96,24 +96,6 @@ def init_database():
         db.executescript(f.read())
     db.commit()
 
-def get_memory_storage() -> redis.StrictRedis:
-    memory_storage = getattr(g, '_memory_storage', None)
-    if memory_storage is None:
-        memory_storage = redis.StrictRedis(
-            decode_responses=True,
-            charset="utf-8")
-        g._memory_storage = memory_storage
-    return memory_storage
-
-def init_memory_storage():
-    memory_storage = get_memory_storage()
-    memory_storage.flushdb()
-    pipe = memory_storage.pipeline()
-    for p in test_utils.get_installed_test_sets("test_sets"):
-        pipe.set(f"repository:{p['name']}", json.dumps(p))
-        pipe.zadd("repository_index", {p['name']: 0})
-    pipe.execute()
-
 def api_parametrized_search(
         db: sqlite3.Connection,
         table: str,
@@ -210,6 +192,34 @@ def api_parametrized_search(
 
     query = f"{query} {where_clause} {order_by_clause} {limit_clause}"
     return db.execute(query, placeholders_values)
+
+
+################### Memory storage related function ##########################
+
+def get_memory_storage() -> redis.StrictRedis:
+    memory_storage = getattr(g, '_memory_storage', None)
+    if memory_storage is None:
+        memory_storage = redis.StrictRedis(
+            decode_responses=True,
+            charset="utf-8")
+        g._memory_storage = memory_storage
+    return memory_storage
+
+def init_memory_storage():
+    memory_storage = get_memory_storage()
+    memory_storage.flushdb()
+    pipe = memory_storage.pipeline()
+    for p in test_utils.get_installed_test_sets("test_sets"):
+        pipe.set(f"repository:{p['name']}", json.dumps(p))
+        pipe.zadd("repository_index", {p['name']: 0})
+    pipe.execute()
+
+def clear_environment_cache(environment_key):
+    memory_storage = get_memory_storage()
+    pipe = memory_storage.pipeline()
+    pipe.delete(environment_key)
+    pipe.delete(f"{environment_key}:installed_index")
+    pipe.execute()
 
 
 ######################## Request check functions #############################
@@ -325,6 +335,7 @@ CORS(
         r"/environments/([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]+/+": {},
         r"/executions/*": {},
         r"/sessions/*": {},
+        r"/subscribe": {},
         r"/test_sets/*": {}
     })
 
@@ -333,6 +344,7 @@ def close_connection(exception):
     db = getattr(g, '_database', None)
     if db is not None:
         db.close()
+
 
 ############################# Error handlers #################################
 
@@ -425,6 +437,9 @@ def add_environment():
             WHERE id_session = ?""",
             (previous_session['id_session'],))
 
+        clear_environment_cache(f"environments:{ip}:{port}")
+        
+
     to_insert = (
         ip,
         port,
@@ -451,13 +466,33 @@ def add_environment():
         )
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         to_insert)
-
     db.commit()
+    cursor = db.execute(
+        """SELECT id_session, session_start, env_ip, env_port
+        FROM session
+        WHERE id_session = ?""",
+        (cursor.lastrowid,))
+    last_inserted = cursor.fetchone()
 
-    get_memory_storage().hset(
+    memory_storage = get_memory_storage()
+
+    # Marks installed cache as not initialized.
+    memory_storage.hset(
         f"environments:{ip}:{port}",
         "installed_cached",
         "0")
+
+    # Notifies about the now connected environment.
+    message = json.dumps({
+        'event': 'start',
+        'content': {
+            'session_id': last_inserted['id_session'],
+            'session_start': last_inserted['session_start'],
+            'ip': last_inserted['env_ip'],
+            'port': last_inserted['env_port']
+        }
+    })
+    memory_storage.publish("environments", message)
 
     return Response(status=204, mimetype="application/json")
 
@@ -478,13 +513,16 @@ def remove_environment(ip, port):
 
     db.commit()
 
-    # Clears cache.
-    environment_key = f"environments:{ip}:{port}"
-    memory_storage = get_memory_storage()
-    pipe = memory_storage.pipeline()
-    pipe.delete(environment_key)
-    pipe.delete(f"{environment_key}:installed_index")
-    pipe.execute()
+    clear_environment_cache(f"environments:{ip}:{port}")
+
+    message = json.dumps({
+        'event': 'stop',
+        'content': {
+            'ip': ip,
+            'port': port
+        }
+    })
+    get_memory_storage().publish("environments", message)
 
     return Response(status=204, mimetype="application/json")
 
@@ -959,6 +997,17 @@ def delete_session(session_id):
     db.commit()
 
     return Response(status=204, mimetype="application/json")
+
+@app.route("/subscribe", methods=["GET"])
+def subscribe():
+    def event_stream():
+        with app.app_context():
+            sub = get_memory_storage().pubsub(ignore_subscribe_messages=True)
+            sub.subscribe("environments")
+            for message in sub.listen():
+                yield f"data: {message['data']}\n\n"
+
+    return Response(event_stream(), mimetype="text/event-stream")
 
 @app.route("/test_sets", methods=["GET"])
 def list_available_test_sets():
