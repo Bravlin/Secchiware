@@ -10,6 +10,7 @@ import sqlite3
 import sys
 import tempfile
 import test_utils
+import time
 
 from base64 import b64encode
 from flask import abort, Flask, g, jsonify, request, Response
@@ -87,7 +88,7 @@ def get_database() -> sqlite3.Connection:
         db.execute("PRAGMA foreign_keys = ON")
     return db
 
-def init_database():
+def init_database() -> None:
     """Creates in the database the schemas needed for the application, if they
     don't exist."""
 
@@ -152,8 +153,8 @@ def api_parametrized_search(
     else:
         if not parameters['order_by'] in order_by_api_to_db:
             raise ValueError("Invalid order key")
-        order_by_clause =\
-            f"ORDER BY {order_by_api_to_db[parameters['order_by']]}"
+        order_by_clause = (
+            f"ORDER BY {order_by_api_to_db[parameters['order_by']]}")
         param_keys.remove('order_by')
 
         if 'arrange' in param_keys:
@@ -182,8 +183,8 @@ def api_parametrized_search(
         for value in parameters[key].split(","):
             placeholder_key = f"{key}{i}"
             placeholders_values[placeholder_key] = value
-            where_filter =\
-                f"{where_filter} OR {column}{operator}:{placeholder_key}"
+            where_filter = (
+                f"{where_filter} OR {column}{operator}:{placeholder_key}")
             i += 1
 
         where_filter = where_filter.replace(" OR ", "", 1)
@@ -205,7 +206,7 @@ def get_memory_storage() -> redis.StrictRedis:
         g._memory_storage = memory_storage
     return memory_storage
 
-def init_memory_storage():
+def init_memory_storage() -> None:
     memory_storage = get_memory_storage()
     memory_storage.flushdb()
     pipe = memory_storage.pipeline()
@@ -214,7 +215,7 @@ def init_memory_storage():
         pipe.zadd("repository_index", {p['name']: 0})
     pipe.execute()
 
-def clear_environment_cache(environment_key):
+def clear_environment_cache(environment_key) -> None:
     memory_storage = get_memory_storage()
     pipe = memory_storage.pipeline()
     pipe.delete(environment_key)
@@ -224,7 +225,7 @@ def clear_environment_cache(environment_key):
 
 ######################## Request check functions #############################
 
-def check_registered(ip: str, port: int):
+def check_registered(ip: str, port: int) -> None:
     """Verifies if the given ip and port correspond to an active environment.
 
     Parameters
@@ -250,7 +251,7 @@ def check_registered(ip: str, port: int):
         abort(404,
             description=f"No environment registered at {ip}:{port}")
 
-def check_is_json():
+def check_is_json() -> None:
     """Verifies that the current request's MIME type is 'application/json'.
 
     Abort
@@ -262,7 +263,7 @@ def check_is_json():
     if not request.is_json:
         abort(415, description="Content Type is not application/json")
 
-def check_digest_header():
+def check_digest_header() -> None:
     """Verifies that the current request has a "Digest" header and that the
     provided digest corresponds to the request's body.
 
@@ -283,7 +284,7 @@ def check_digest_header():
 
 def check_authorization_header(
         key_recoverer: Callable[[str], Optional[bytes]],
-        *mandatory_headers):
+        *mandatory_headers) -> None:
     """Verifies that the incoming request fulfills the SECCHIWARE-HMAC-256.
     authorization scheme.
     
@@ -438,7 +439,14 @@ def add_environment():
             (previous_session['id_session'],))
 
         clear_environment_cache(f"environments:{ip}:{port}")
-        
+
+    memory_storage = get_memory_storage()
+
+    # Marks installed tests cache as not initialized.
+    memory_storage.hset(
+        f"environments:{ip}:{port}",
+        "installed_cached",
+        "0")
 
     to_insert = (
         ip,
@@ -467,22 +475,14 @@ def add_environment():
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         to_insert)
     db.commit()
+
+    # Notifies about the now connected environment.
     cursor = db.execute(
         """SELECT id_session, session_start, env_ip, env_port
         FROM session
         WHERE id_session = ?""",
         (cursor.lastrowid,))
     last_inserted = cursor.fetchone()
-
-    memory_storage = get_memory_storage()
-
-    # Marks installed cache as not initialized.
-    memory_storage.hset(
-        f"environments:{ip}:{port}",
-        "installed_cached",
-        "0")
-
-    # Notifies about the now connected environment.
     message = json.dumps({
         'event': 'start',
         'content': {
@@ -570,9 +570,14 @@ def list_installed_test_sets(ip, port):
 
     memory_storage = get_memory_storage()
     environment_key = f"environments:{ip}:{port}"
+
     installed_cached = memory_storage.hget(
         environment_key,
         "installed_cached")
+    lock = memory_storage.lock(f"{environment_key}:installed:mutex", timeout=30)
+    while installed_cached == "0" and not lock.acquire(blocking=False):
+        time.sleep(0.5)
+
     if installed_cached == "1":
         packages_names = memory_storage.zrange(
             f"{environment_key}:installed_index",
@@ -580,33 +585,36 @@ def list_installed_test_sets(ip, port):
             -1)
         installed_str = ",".join(memory_storage.hmget(
             environment_key,
-            *[f"installed:{p}" for p in packages_names]))
+            tuple(f"installed:{p}" for p in packages_names)))
     else:
         try:
             resp = rq.get(f"http://{ip}:{port}/test_sets")
         except rq.exceptions.ConnectionError:
             abort(504,
                 description="The requested environment could not be reached")
+        else:
+            if resp.status_code != 200:
+                abort(
+                    502,
+                    description=
+                        f"Unexpected response from node at {ip}:{port}")
 
-        if resp.status_code != 200:
-            abort(
-                502,
-                description=f"Unexpected response from node at {ip}:{port}")
+            installed_str = resp.text
 
-        installed_str = resp.text
-
-        # Saves the node's response in the cache.
-        pipe = memory_storage.pipeline()
-        for p in json.loads(installed_str):
-            pipe.hset(
-                environment_key,
-                f"installed:{p['name']}",
-                json.dumps(p))
-            pipe.zadd(
-                f"{environment_key}:installed_index",
-                {p['name']: 0})
-        pipe.hset(environment_key, "installed_cached", "1")
-        pipe.execute()
+            # Saves the node's response in the cache.
+            pipe = memory_storage.pipeline()
+            for p in json.loads(installed_str):
+                pipe.hset(
+                    environment_key,
+                    f"installed:{p['name']}",
+                    json.dumps(p))
+                pipe.zadd(
+                    f"{environment_key}:installed_index",
+                    {p['name']: 0})
+            pipe.hset(environment_key, "installed_cached", "1")
+            pipe.execute()
+        finally:
+            lock.release()
 
     return Response(
         response=f"[{installed_str}]",
@@ -621,60 +629,69 @@ def install_packages(ip, port):
     check_is_json()
 
     packages = request.json
-    try:
-        with tempfile.SpooledTemporaryFile() as f:
-            # Can throw ValueError.
+
+    with tempfile.SpooledTemporaryFile() as f:
+        # Can throw ValueError.
+        try:
             test_utils.compress_test_packages(f, packages, TESTS_PATH)
-            f.seek(0)
-            prepared = rq.Request(
-                "PATCH",
-                f"http://{ip}:{port}/test_sets",
-                files={'packages': f}).prepare()
-        
-        digest = b64encode(sha256(prepared.body).digest()).decode()
-        prepared.headers['Digest'] = f"sha-256={digest}"
-
-        headers = ['Digest']
-        signature = signatures.new_signature(
-            config['NODE_SECRET'],
+        except ValueError as e:
+            abort(400, description=str(e))
+        f.seek(0)
+        prepared = rq.Request(
             "PATCH",
-            "/test_sets",
-            signature_headers=headers,
-            header_recoverer=lambda h: prepared.headers.get(h))
-        prepared.headers['Authorization'] = (
-            signatures.new_authorization_header("C2", signature, headers))
-
-        resp = rq.Session().send(prepared)
-    except ValueError as e:
-        abort(400, description=str(e))
-    except rq.exceptions.ConnectionError:
-        abort(504,
-            description="The requested environment could not be reached")
+            f"http://{ip}:{port}/test_sets",
+            files={'packages': f}).prepare()
     
-    if resp.status_code == 204:
-        environment_key = f"environments:{ip}:{port}"
-        memory_storage = get_memory_storage()
-        installed_cached = memory_storage.hget(
-            environment_key,
-            "installed_cached")
-        if installed_cached == "1":
-            # Updates cache if it exists.
-            pipe = memory_storage.pipeline()
-            for pack in packages:
-                pipe.hset(
-                    environment_key,
-                    f"installed:{pack}",
-                    memory_storage.get(f"repository:{pack}"))
-                pipe.zadd(f"{environment_key}:installed_index", {pack: 0})
-            pipe.execute()
+    digest = b64encode(sha256(prepared.body).digest()).decode()
+    prepared.headers['Digest'] = f"sha-256={digest}"
 
-        return Response(status=204, mimetype="application/json")
+    headers = ['Digest']
+    signature = signatures.new_signature(
+        config['NODE_SECRET'],
+        "PATCH",
+        "/test_sets",
+        signature_headers=headers,
+        header_recoverer=lambda h: prepared.headers.get(h))
+    prepared.headers['Authorization'] = (
+        signatures.new_authorization_header("C2", signature, headers))
 
-    if resp.status_code in {400, 401, 415}:
-        abort(500,
-            description="Something went wrong when handling the request")
+    memory_storage = get_memory_storage()
+    environment_key = f"environments:{ip}:{port}"
+    with memory_storage.lock(
+            f"{environment_key}:installed:mutex",
+            timeout=30,
+            sleep=0.5):
+        try:
+            resp = rq.Session().send(prepared)        
+        except rq.exceptions.ConnectionError:
+            abort(
+                504,
+                description="The requested environment could not be reached")
+        if resp.status_code == 204:
+            installed_cached = memory_storage.hget(
+                environment_key,
+                "installed_cached")
+            if installed_cached == "1":
+                # Updates cache if it exists.
+                pipe = memory_storage.pipeline()
+                for pack in packages:
+                    pipe.hset(
+                        environment_key,
+                        f"installed:{pack}",
+                        memory_storage.get(f"repository:{pack}"))
+                    pipe.zadd(f"{environment_key}:installed_index", {pack: 0})
+                pipe.execute()
 
-    abort(502, description=f"Unexpected response from node at {ip}:{port}")
+            return Response(status=204, mimetype="application/json")
+
+        if resp.status_code in {400, 401, 415}:
+            abort(
+                500,
+                description="Something went wrong when handling the request")
+
+        abort(
+            502,
+            description=f"Unexpected response from node at {ip}:{port}")
 
 @app.route(
     "/environments/<ip>/<int:port>/installed/<package>",
@@ -687,35 +704,43 @@ def delete_installed_package(ip, port, package):
         config['NODE_SECRET'],
         "DELETE",
         f"/test_sets/{package}")
-    authorization_content = signatures.new_authorization_header("C2", signature)
+    authorization_content = signatures.new_authorization_header(
+        "C2",
+        signature)
 
-    try:
-        resp = rq.delete(
-            f"http://{ip}:{port}/test_sets/{package}",
-            headers={'Authorization': authorization_content})
-    except rq.exceptions.ConnectionError:
-        abort(504,
-            description="The requested environment could not be reached")
+    environment_key = f"environments:{ip}:{port}"
+    memory_storage = get_memory_storage()
+    with memory_storage.lock(
+            f"{environment_key}:installed:mutex",
+            timeout=30,
+            sleep=0.5):
+        try:
+            resp = rq.delete(
+                f"http://{ip}:{port}/test_sets/{package}",
+                headers={'Authorization': authorization_content})
+        except rq.exceptions.ConnectionError:
+            abort(504,
+                description="The requested environment could not be reached")
 
-    if resp.status_code == 204:
-        environment_key = f"environments:{ip}:{port}"
-        memory_storage = get_memory_storage()
-        installed_cached = memory_storage.hget(
-            environment_key,
-            "installed_cached")
-        if installed_cached == "1":
-            # Updates cache if it exists.
-            pipe = memory_storage.pipeline()
-            pipe.hdel(environment_key, f"installed:{package}")
-            pipe.zrem(f"{environment_key}:installed_index", package)
-            pipe.execute()
+        if resp.status_code == 204:
+            installed_cached = memory_storage.hget(
+                environment_key,
+                "installed_cached")
+            if installed_cached == "1":
+                # Updates cache if it exists.
+                pipe = memory_storage.pipeline()
+                pipe.hdel(environment_key, f"installed:{package}")
+                pipe.zrem(f"{environment_key}:installed_index", package)
+                pipe.execute()
 
-        return Response(status=204, mimetype="application/json")
+            return Response(status=204, mimetype="application/json")
 
-    if resp.status_code in {401, 404}:
-        return abort(404, description=f"'{package}' not found at {ip}:{port}")
+        if resp.status_code in {401, 404}:
+            return abort(
+                404,
+                description=f"'{package}' not found at {ip}:{port}")
 
-    abort(502, description=f"Unexpected response from node at {ip}:{port}")
+        abort(502, description=f"Unexpected response from node at {ip}:{port}")
 
 @app.route("/environments/<ip>/<int:port>/reports", methods=["GET"])
 def execute_tests(ip, port):
@@ -782,6 +807,17 @@ def execute_tests(ip, port):
 
     db.commit()
     return jsonify(resp.json())
+
+@app.route("/events", methods=["GET"])
+def subscribe():
+    def event_stream():
+        with app.app_context():
+            sub = get_memory_storage().pubsub(ignore_subscribe_messages=True)
+            sub.subscribe("environments")
+            for message in sub.listen():
+                yield f"data: {message['data']}\n\n"
+
+    return Response(event_stream(), mimetype="text/event-stream")
 
 @app.route("/executions", methods=["GET"])
 def search_executions():
@@ -998,23 +1034,12 @@ def delete_session(session_id):
 
     return Response(status=204, mimetype="application/json")
 
-@app.route("/subscribe", methods=["GET"])
-def subscribe():
-    def event_stream():
-        with app.app_context():
-            sub = get_memory_storage().pubsub(ignore_subscribe_messages=True)
-            sub.subscribe("environments")
-            for message in sub.listen():
-                yield f"data: {message['data']}\n\n"
-
-    return Response(event_stream(), mimetype="text/event-stream")
-
 @app.route("/test_sets", methods=["GET"])
 def list_available_test_sets():
     memory_storage = get_memory_storage()
     packages_names = memory_storage.zrange("repository_index", 0, -1)
     packages_content = memory_storage.mget(
-        *[f"repository:{p}" for p in packages_names])
+        *tuple(f"repository:{p}" for p in packages_names))
     return Response(
         response=f"[{','.join(packages_content)}]",
         status=200,
@@ -1029,29 +1054,27 @@ def upload_test_sets():
         abort(400, description="'packages' key not found in request's body")
     check_authorization_header(client_key_recoverer, "Digest")
     
-    try:
-        new_packages = test_utils.uncompress_test_packages(
-            request.files['packages'],
-            TESTS_PATH)
-    except Exception as e:
-        print(str(e))
-        abort(400, description="Invalid file content")
+    memory_storage = get_memory_storage()
+    with memory_storage.lock("repository:mutex", timeout=30, sleep=0.5):
+        try:
+            new_packages = test_utils.uncompress_test_packages(
+                request.files['packages'],
+                TESTS_PATH)
+        except Exception:
+            abort(400, description="Invalid file content")
 
-    new_info = []
-    for new_pack in new_packages:
-        new_pack = f"test_sets.{new_pack}"
-        # If it is a new version, the next sentence removes the old one
-        test_utils.clean_package(new_pack)
-        new_info.append(
-            test_utils.get_installed_package(new_pack))
+        pipe = memory_storage.pipeline()
+        for new_pack in new_packages:
+            new_pack = f"test_sets.{new_pack}"
+            # If it is a new version, the next sentence removes the old one
+            test_utils.clean_package(new_pack)
 
-    # Updates the cache
-    pipe = get_memory_storage().pipeline()
-    for ni in new_info:
-        pipe.set(f"repository:{ni['name']}", json.dumps(ni))
-        pipe.zadd("repository_index", {ni['name']: 0})
-    pipe.execute()
-
+            # Updates the cache
+            new_info = test_utils.get_installed_package(new_pack)
+            pipe.set(f"repository:{new_info['name']}", json.dumps(new_info))
+            pipe.zadd("repository_index", {new_info['name']: 0})
+        pipe.execute()
+                            
     return Response(status=204, mimetype="application/json")
 
 @app.route("/test_sets/<package>", methods=["DELETE"])
@@ -1059,17 +1082,19 @@ def delete_package(package):
     check_authorization_header(client_key_recoverer)
 
     package_path = os.path.join(TESTS_PATH, package)
-    if not os.path.isdir(package_path):
-        abort(404, description=f"Package '{package}' not found")
+    memory_storage = get_memory_storage()
+    with memory_storage.lock("repository:mutex", timeout=30, sleep=0.5):
+        if not os.path.isdir(package_path):
+            abort(404, description=f"Package '{package}' not found")
 
-    shutil.rmtree(package_path)
-    test_utils.clean_package(package)
-    
-    # Deletes the entry from the cache
-    pipe = get_memory_storage().pipeline()
-    pipe.delete(f"repository:{package}")
-    pipe.zrem("repository_index", package)
-    pipe.execute()
+        shutil.rmtree(package_path)
+        test_utils.clean_package(package)
+        
+        # Deletes the entry from the cache
+        pipe = memory_storage.pipeline()
+        pipe.delete(f"repository:{package}")
+        pipe.zrem("repository_index", package)
+        pipe.execute()
 
     return Response(status=204, mimetype="application/json")
 
