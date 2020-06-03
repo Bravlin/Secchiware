@@ -338,9 +338,9 @@ CORS(
     resources={
         r"/environments": {'methods': "GET"},
         r"/environments/([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]+/+": {},
+        r"/events": {},
         r"/executions/*": {},
         r"/sessions/*": {},
-        r"/subscribe": {},
         r"/test_sets/*": {}
     })
 
@@ -593,6 +593,7 @@ def list_installed_test_sets(ip, port):
         installed_str = ",".join(memory_storage.hmget(
             environment_key,
             tuple(f"installed:{p}" for p in packages_names)))
+        installed_str = f"[{installed_str}]"
     else:
         try:
             resp = rq.get(f"http://{ip}:{port}/test_sets")
@@ -624,7 +625,7 @@ def list_installed_test_sets(ip, port):
             lock.release()
 
     return Response(
-        response=f"[{installed_str}]",
+        response=installed_str,
         status=200,
         mimetype="application/json")
 
