@@ -201,6 +201,10 @@ def get_memory_storage() -> redis.StrictRedis:
     memory_storage = getattr(g, '_memory_storage', None)
     if memory_storage is None:
         memory_storage = redis.StrictRedis(
+            host=config["REDIS"]["HOST"],
+            port=config["REDIS"]["PORT"],
+            db=config["REDIS"]["DB"],
+            password=config["REDIS"]["PASSWORD"],
             decode_responses=True,
             charset="utf-8")
         g._memory_storage = memory_storage
@@ -576,7 +580,10 @@ def list_installed_test_sets(ip, port):
         "installed_cached")
     lock = memory_storage.lock(f"{environment_key}:installed:mutex", timeout=30)
     while installed_cached == "0" and not lock.acquire(blocking=False):
-        time.sleep(0.5)
+        time.sleep(1)
+        installed_cached = memory_storage.hget(
+            environment_key,
+            "installed_cached")
 
     if installed_cached == "1":
         packages_names = memory_storage.zrange(
@@ -660,7 +667,7 @@ def install_packages(ip, port):
     with memory_storage.lock(
             f"{environment_key}:installed:mutex",
             timeout=30,
-            sleep=0.5):
+            sleep=1):
         try:
             resp = rq.Session().send(prepared)        
         except rq.exceptions.ConnectionError:
@@ -713,7 +720,7 @@ def delete_installed_package(ip, port, package):
     with memory_storage.lock(
             f"{environment_key}:installed:mutex",
             timeout=30,
-            sleep=0.5):
+            sleep=1):
         try:
             resp = rq.delete(
                 f"http://{ip}:{port}/test_sets/{package}",
@@ -1055,7 +1062,7 @@ def upload_test_sets():
     check_authorization_header(client_key_recoverer, "Digest")
     
     memory_storage = get_memory_storage()
-    with memory_storage.lock("repository:mutex", timeout=30, sleep=0.5):
+    with memory_storage.lock("repository:mutex", timeout=30, sleep=1):
         try:
             new_packages = test_utils.uncompress_test_packages(
                 request.files['packages'],
@@ -1083,7 +1090,7 @@ def delete_package(package):
 
     package_path = os.path.join(TESTS_PATH, package)
     memory_storage = get_memory_storage()
-    with memory_storage.lock("repository:mutex", timeout=30, sleep=0.5):
+    with memory_storage.lock("repository:mutex", timeout=30, sleep=1):
         if not os.path.isdir(package_path):
             abort(404, description=f"Package '{package}' not found")
 
