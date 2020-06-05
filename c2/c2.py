@@ -488,7 +488,7 @@ def add_environment():
         (cursor.lastrowid,))
     last_inserted = cursor.fetchone()
     message = json.dumps({
-        'event': 'start',
+        'event': 'session_start',
         'content': {
             'session_id': last_inserted['id_session'],
             'session_start': last_inserted['session_start'],
@@ -520,7 +520,7 @@ def remove_environment(ip, port):
     clear_environment_cache(f"environments:{ip}:{port}")
 
     message = json.dumps({
-        'event': 'stop',
+        'event': 'session_stop',
         'content': {
             'ip': ip,
             'port': port
