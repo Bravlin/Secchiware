@@ -893,17 +893,12 @@ paths:
                     example: 4500
                   platform_info:
                     $ref: '#/components/schemas/EnvironmentPlatformInformation'
-                  total_executions:
-                    type: integer
-                    description: The total amount of executions associated to the session.
-                    example: 4
                 required:
                   - session_id
                   - session_start
                   - ip
                   - port
                   - platform_info
-                  - total_executions
         '404':
           $ref: '#/components/responses/404ResourceNotFound'
     delete:

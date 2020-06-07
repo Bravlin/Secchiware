@@ -978,12 +978,7 @@ def get_session(session_id):
         s.env_port, s.env_platform, s.env_node, s.env_os_system,
         s.env_os_release, s.env_os_version, s.env_hw_machine,
         s.env_hw_processor, s.env_py_build_no, s.env_py_build_date,
-        s.env_py_compiler, s.env_py_implementation, s.env_py_version,
-        (
-            SELECT COUNT(id_execution)
-            FROM execution
-            WHERE fk_session = s.id_session
-        ) AS total_executions
+        s.env_py_compiler, s.env_py_implementation, s.env_py_version
         FROM session s
         WHERE s.id_session = ?""", (session_id,)).fetchone()
 
@@ -1013,8 +1008,7 @@ def get_session(session_id):
                 'implementation': row['env_py_implementation'],
                 'version': row['env_py_version']
             }
-        },
-        'total_executions': row['total_executions']
+        }
     }
 
     if row['session_end']:
