@@ -444,10 +444,8 @@ def add_environment():
 
         clear_environment_cache(f"environments:{ip}:{port}")
 
-    memory_storage = get_memory_storage()
-
     # Marks installed tests cache as not initialized.
-    memory_storage.hset(
+    get_memory_storage().hset(
         f"environments:{ip}:{port}",
         "installed_cached",
         "0")
@@ -480,24 +478,6 @@ def add_environment():
         to_insert)
     db.commit()
 
-    # Notifies about the now connected environment.
-    cursor = db.execute(
-        """SELECT id_session, session_start, env_ip, env_port
-        FROM session
-        WHERE id_session = ?""",
-        (cursor.lastrowid,))
-    last_inserted = cursor.fetchone()
-    message = json.dumps({
-        'event': 'session_start',
-        'content': {
-            'session_id': last_inserted['id_session'],
-            'session_start': last_inserted['session_start'],
-            'ip': last_inserted['env_ip'],
-            'port': last_inserted['env_port']
-        }
-    })
-    memory_storage.publish("environments", message)
-
     return Response(status=204, mimetype="application/json")
 
 @app.route("/environments/<ip>/<int:port>", methods=["DELETE"])
@@ -516,17 +496,7 @@ def remove_environment(ip, port):
             description=f"No environment registered at {ip}:{port}")
 
     db.commit()
-
     clear_environment_cache(f"environments:{ip}:{port}")
-
-    message = json.dumps({
-        'event': 'session_stop',
-        'content': {
-            'ip': ip,
-            'port': port
-        }
-    })
-    get_memory_storage().publish("environments", message)
 
     return Response(status=204, mimetype="application/json")
 
@@ -815,17 +785,6 @@ def execute_tests(ip, port):
 
     db.commit()
     return jsonify(resp.json())
-
-@app.route("/events", methods=["GET"])
-def subscribe():
-    def event_stream():
-        with app.app_context():
-            sub = get_memory_storage().pubsub(ignore_subscribe_messages=True)
-            sub.subscribe("environments")
-            for message in sub.listen():
-                yield f"data: {message['data']}\n\n"
-
-    return Response(event_stream(), mimetype="text/event-stream")
 
 @app.route("/executions", methods=["GET"])
 def search_executions():
