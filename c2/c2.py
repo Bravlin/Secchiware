@@ -2,6 +2,7 @@ import hmac
 import json
 import os
 import redis
+import redis_custom_locking as rcl
 import requests as rq
 import signatures
 import shutil
@@ -548,7 +549,9 @@ def list_installed_test_sets(ip, port):
     installed_cached = memory_storage.hget(
         environment_key,
         "installed_cached")
-    lock = memory_storage.lock(f"{environment_key}:installed:mutex", timeout=30)
+    lock = memory_storage.lock(
+        f"{environment_key}:installed:mutex",
+        timeout=30)
     while installed_cached == "0" and not lock.acquire(blocking=False):
         time.sleep(1)
         installed_cached = memory_storage.hget(
@@ -607,69 +610,71 @@ def install_packages(ip, port):
     check_is_json()
 
     packages = request.json
-
-    with tempfile.SpooledTemporaryFile() as f:
-        # Can throw ValueError.
-        try:
-            test_utils.compress_test_packages(f, packages, TESTS_PATH)
-        except ValueError as e:
-            abort(400, description=str(e))
-        f.seek(0)
-        prepared = rq.Request(
-            "PATCH",
-            f"http://{ip}:{port}/test_sets",
-            files={'packages': f}).prepare()
-    
-    digest = b64encode(sha256(prepared.body).digest()).decode()
-    prepared.headers['Digest'] = f"sha-256={digest}"
-
-    headers = ['Digest']
-    signature = signatures.new_signature(
-        config['NODE_SECRET'],
-        "PATCH",
-        "/test_sets",
-        signature_headers=headers,
-        header_recoverer=lambda h: prepared.headers.get(h))
-    prepared.headers['Authorization'] = (
-        signatures.new_authorization_header("C2", signature, headers))
-
     memory_storage = get_memory_storage()
-    environment_key = f"environments:{ip}:{port}"
-    with memory_storage.lock(
-            f"{environment_key}:installed:mutex",
-            timeout=30,
-            sleep=1):
-        try:
-            resp = rq.Session().send(prepared)        
-        except rq.exceptions.ConnectionError:
-            abort(
-                504,
-                description="The requested environment could not be reached")
-        if resp.status_code == 204:
-            installed_cached = memory_storage.hget(
-                environment_key,
-                "installed_cached")
-            if installed_cached == "1":
-                # Updates cache if it exists.
-                pipe = memory_storage.pipeline()
-                for pack in packages:
-                    pipe.hset(
-                        environment_key,
-                        f"installed:{pack}",
-                        memory_storage.get(f"repository:{pack}"))
-                    pipe.zadd(f"{environment_key}:installed_index", {pack: 0})
-                pipe.execute()
 
-            return Response(status=204, mimetype="application/json")
+    with rcl.ReaderLock(memory_storage, "repository", 30, 1):
+        with tempfile.SpooledTemporaryFile() as f:
+            # Can throw ValueError.
+            try:
+                test_utils.compress_test_packages(f, packages, TESTS_PATH)
+            except ValueError as e:
+                abort(400, description=str(e))
+            f.seek(0)
+            prepared = rq.Request(
+                "PATCH",
+                f"http://{ip}:{port}/test_sets",
+                files={'packages': f}).prepare()
+        
+        digest = b64encode(sha256(prepared.body).digest()).decode()
+        prepared.headers['Digest'] = f"sha-256={digest}"
 
-        if resp.status_code in {400, 401, 415}:
-            abort(
-                500,
-                description="Something went wrong when handling the request")
+        headers = ['Digest']
+        signature = signatures.new_signature(
+            config['NODE_SECRET'],
+            "PATCH",
+            "/test_sets",
+            signature_headers=headers,
+            header_recoverer=lambda h: prepared.headers.get(h))
+        prepared.headers['Authorization'] = (
+            signatures.new_authorization_header("C2", signature, headers))
 
+        environment_key = f"environments:{ip}:{port}"
+        with memory_storage.lock(
+                f"{environment_key}:installed:mutex",
+                timeout=30,
+                sleep=1):
+            try:
+                resp = rq.Session().send(prepared)        
+            except rq.exceptions.ConnectionError:
+                abort(
+                    504,
+                    description=
+                        "The requested environment could not be reached")
+            if resp.status_code == 204:
+                installed_cached = memory_storage.hget(
+                    environment_key,
+                    "installed_cached")
+                if installed_cached == "1":
+                    # Updates cache if it exists.
+                    pipe = memory_storage.pipeline()
+                    for pack in packages:
+                        pipe.hset(
+                            environment_key,
+                            f"installed:{pack}",
+                            memory_storage.get(f"repository:{pack}"))
+                        pipe.zadd(
+                            f"{environment_key}:installed_index",
+                            {pack: 0})
+                    pipe.execute()
+
+                return Response(status=204, mimetype="application/json")
+
+    if resp.status_code in {400, 401, 415}:
         abort(
-            502,
-            description=f"Unexpected response from node at {ip}:{port}")
+            500,
+            description="Something went wrong when handling the request")
+
+    abort(502, description=f"Unexpected response from node at {ip}:{port}")
 
 @app.route(
     "/environments/<ip>/<int:port>/installed/<package>",
@@ -1016,7 +1021,7 @@ def upload_test_sets():
     check_authorization_header(client_key_recoverer, "Digest")
     
     memory_storage = get_memory_storage()
-    with memory_storage.lock("repository:mutex", timeout=30, sleep=1):
+    with rcl.WriterLock(memory_storage, "repository", 30, 1):
         try:
             new_packages = test_utils.uncompress_test_packages(
                 request.files['packages'],
@@ -1044,7 +1049,7 @@ def delete_package(package):
 
     package_path = os.path.join(TESTS_PATH, package)
     memory_storage = get_memory_storage()
-    with memory_storage.lock("repository:mutex", timeout=30, sleep=1):
+    with rcl.WriterLock(memory_storage, "repository", 30, 1):
         if not os.path.isdir(package_path):
             abort(404, description=f"Package '{package}' not found")
 
