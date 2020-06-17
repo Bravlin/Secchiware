@@ -199,6 +199,16 @@ def api_parametrized_search(
 ################### Memory storage related function ##########################
 
 def get_memory_storage() -> redis.StrictRedis:
+    """Gets a connection to the in-memory storage.
+
+    It starts one if it was not already created.
+
+    Returns
+    -------
+    redis.StrictRedis
+        The connection to the in-memory storage.
+    """
+
     memory_storage = getattr(g, '_memory_storage', None)
     if memory_storage is None:
         memory_storage = redis.StrictRedis(
@@ -212,6 +222,10 @@ def get_memory_storage() -> redis.StrictRedis:
     return memory_storage
 
 def init_memory_storage() -> None:
+    """Initialize the in-memory storage cleaning any previous data and caching
+    the result of the instrospection of the available packages in the
+    repository."""
+
     memory_storage = get_memory_storage()
     memory_storage.flushdb()
     pipe = memory_storage.pipeline()
@@ -220,7 +234,17 @@ def init_memory_storage() -> None:
         pipe.zadd("repository_index", {p['name']: 0})
     pipe.execute()
 
-def clear_environment_cache(environment_key) -> None:
+def clear_environment_cache(environment_key: str) -> None:
+    """Clear all cached data of the specified environment from the in-memory
+    repository.
+
+    Parameters
+    ----------
+    environment_key: str
+        The key by which the environment is identified in the in-memory
+        repository.
+    """
+
     memory_storage = get_memory_storage()
     pipe = memory_storage.pipeline()
     pipe.delete(environment_key)
