@@ -363,7 +363,6 @@ CORS(
     resources={
         r"/environments": {'methods': "GET"},
         r"/environments/([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]+/+": {},
-        r"/events": {},
         r"/executions/*": {},
         r"/sessions/*": {},
         r"/test_sets/*": {}
