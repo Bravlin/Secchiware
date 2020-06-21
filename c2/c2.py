@@ -165,12 +165,20 @@ def api_parametrized_search(
             param_keys.remove('arrange')
     
     if not 'limit' in param_keys:
+        if 'offset' in param_keys:
+            raise ValueError("offset key present when no limit is specified")
         limit_clause = ""
     else:
         if int(parameters['limit']) <= 0:
             raise ValueError("Invalid limit value")
         limit_clause = f"LIMIT {parameters['limit']}"
         param_keys.remove('limit')
+
+        if 'offset' in param_keys:
+            if int(parameters['offset']) < 0:
+                raise ValueError("Invalid offset value")
+            limit_clause = f"{limit_clause} OFFSET {parameters['offset']}"
+            param_keys.remove('offset')
 
     where_clause = ""
     placeholders_values = {}
@@ -1055,10 +1063,10 @@ def upload_test_sets():
         pipe = memory_storage.pipeline()
         for new_pack in new_packages:
             new_pack = f"test_sets.{new_pack}"
-            # If it is a new version, the next sentence removes the old one
+            # If it is a new version, the next sentence removes the old one.
             test_utils.clean_package(new_pack)
 
-            # Updates the cache
+            # Updates the cache.
             new_info = test_utils.get_installed_package(new_pack)
             pipe.set(f"repository:{new_info['name']}", json.dumps(new_info))
             pipe.zadd("repository_index", {new_info['name']: 0})
@@ -1079,7 +1087,7 @@ def delete_package(package):
         shutil.rmtree(package_path)
         test_utils.clean_package(package)
         
-        # Deletes the entry from the cache
+        # Deletes the entry from the cache.
         pipe = memory_storage.pipeline()
         pipe.delete(f"repository:{package}")
         pipe.zrem("repository_index", package)

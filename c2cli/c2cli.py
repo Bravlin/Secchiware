@@ -177,6 +177,10 @@ def lsenv():
     type=click.Choice(["asc", "desc"], case_sensitive=False),
     help="Ascending or descending sort order.")
 @click.option("--limit", type=int, help="Max quantity of allowed results.")
+@click.option(
+    "--offset",
+    type=int,
+    help="Used with limit to specify where the result set should start from.")
 def search_sessions(
         session_id: List[int],
         start_from: str,
@@ -188,7 +192,8 @@ def search_sessions(
         system: List[str],
         order_by: str,
         arrange: str,
-        limit: int):
+        limit: int,
+        offset: int):
     """Recover information about sessions that match the given criteria."""
 
     query = ""
@@ -214,6 +219,8 @@ def search_sessions(
         query = f"{query}&arrange={arrange}"
     if limit:
         query = f"{query}&limit={limit}"
+    if offset:
+        query = f"{query}&offset={offset}"
     query = query.replace("&", "?", 1)
 
     try:
@@ -312,6 +319,10 @@ def delete_sessions(password: str, sessions: List[int]):
     type=click.Choice(["asc", "desc"], case_sensitive=False),
     help="Ascending or descending sort order.")
 @click.option("--limit", type=int, help="Max quantity of allowed results.")
+@click.option(
+    "--offset",
+    type=int,
+    help="Used with limit to specify where the result set should start from.")
 def search_executions(
         execution_id: List[int],
         session: List[int],
@@ -319,7 +330,8 @@ def search_executions(
         registered_to: str,
         order_by: str,
         arrange: str,
-        limit: int):
+        limit: int,
+        offset: int):
     """Recover information about executions that match the given criteria."""
 
     query = ""
@@ -337,6 +349,8 @@ def search_executions(
         query = f"{query}&arrange={arrange}"
     if limit:
         query = f"{query}&limit={limit}"
+    if offset:
+        query = f"{query}&offset={offset}"
     query = query.replace("&", "?", 1)
 
     try:

@@ -150,7 +150,20 @@ components:
       required: false
       schema:
         type: integer
+        minimum: 1
       description: The max number of instances of the requested resource to be returned by the search.
+      example: 10
+    offset:
+      in: query
+      name: offset
+      required: false
+      schema:
+        type: integer
+        minimum: 0
+      description: >
+        Used with `limit` to specify the starting point of the results set.
+        This paramater is only valid if the parameter `limit` is present.
+        If `limit` is present and this parameter is omitted, the default offset is 0.
       example: 10
     sessionID:
       in: path
@@ -595,6 +608,7 @@ paths:
           style: form
         - $ref: '#/components/parameters/arrange'
         - $ref: '#/components/parameters/limit'
+        - $ref: '#/components/parameters/offset'
       responses:
         '200':
           description: OK
@@ -801,6 +815,7 @@ paths:
           style: form
         - $ref: '#/components/parameters/arrange'
         - $ref: '#/components/parameters/limit'
+        - $ref: '#/components/parameters/offset'
       responses:
         '200':
           description: OK
