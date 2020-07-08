@@ -772,7 +772,7 @@ def execute_tests(ip, port):
     
     url = f"http://{ip}:{port}/reports"
     if request.args:
-        valid_keys = {'packages', 'modules', 'test_sets'}
+        valid_keys = {'packages', 'modules', 'test_sets', 'tests'}
         difference = set(request.args.keys()) - valid_keys
         if difference:
             abort(400, f"Invalid keys {difference} found in query parameters")

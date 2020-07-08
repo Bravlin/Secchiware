@@ -134,6 +134,23 @@ paths:
             list:
               value: [some_package.some_module.SomeTestSet, other_package.subpackage.a_module.OtherTestSet]
               summary: Comma separated test sets
+        - in: query
+          name: tests
+          schema:
+            type: array
+            items:
+              type: string
+          description: The canonical names of the tests to be executed separated by commas.
+          style: form
+          explode: false
+          allowReserved: true
+          examples:
+            simpleCase:
+              value: [some_package.some_module.SomeTestSet.some_test]
+              summary: A test contained in a test set
+            list:
+              value: [some_package.some_module.SomeTestSet.some_test, other_package.subpackage.a_module.OtherTestSet.some_other_test]
+              summary: Comma separated tests
       responses:
         '200':
           description: OK

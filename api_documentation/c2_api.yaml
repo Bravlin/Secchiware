@@ -506,6 +506,7 @@ paths:
         - $ref: 'node_api.yaml#/paths/~1reports/get/parameters/0'
         - $ref: 'node_api.yaml#/paths/~1reports/get/parameters/1'
         - $ref: 'node_api.yaml#/paths/~1reports/get/parameters/2'
+        - $ref: 'node_api.yaml#/paths/~1reports/get/parameters/3'
       responses:
         '200':
           description: OK

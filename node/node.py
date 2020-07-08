@@ -119,7 +119,7 @@ def execute_tests():
     if not request.args:
         tests = test_utils.TestSetCollection("test_sets")
     else:
-        valid_keys = {'packages', 'modules', 'test_sets'}
+        valid_keys = {'packages', 'modules', 'test_sets', 'tests'}
         params = request.args
         if {*params.keys()} - valid_keys:
             abort(400, "Invalid query parameters")
@@ -127,17 +127,19 @@ def execute_tests():
             packages = params.get('packages', [], split_parameter)
             modules = params.get('modules', [], split_parameter)
             test_sets = params.get('test_sets', [], split_parameter)
+            tests = params.get('tests', [], split_parameter)
 
         try:
             tests = test_utils.TestSetCollection(
                 "test_sets",
                 packages,
                 modules,
-                test_sets)
+                test_sets,
+                tests)
         except ModuleNotFoundError:
             abort(404, description="A specified entity was not found")
     
-    return jsonify(tests.run_all_tests())
+    return jsonify(tests.run_all())
 
 @app.route("/test_sets", methods=["GET"])
 def list_installed_test_sets():
@@ -346,4 +348,4 @@ if connect_to_c2():
 else:
     print("Connection refused.\n\nExecuting installed tests...\n\n")
     tests = test_utils.TestSetCollection("test_sets")
-    print(json.dumps(tests.run_all_tests(), indent=2))
+    print(json.dumps(tests.run_all(), indent=2))

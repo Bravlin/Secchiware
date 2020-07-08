@@ -539,7 +539,8 @@ def uninstall(password: str, ip: str, port: int, packages: List[str]):
 @click.option("--package", "-p", multiple=True)
 @click.option("--module", "-m", multiple=True)
 @click.option("--test_set", "-t", multiple=True)
-def get_reports(ip: str, port: int, package: str, module: str, test_set: str):
+@click.option("--test", "-t", multiple=True)
+def get_reports(ip: str, port: int, package: str, module: str, test_set: str, test: str):
     """Execute and recover the reports of the tests installed in the
     environment at IP:PORT."""
 
@@ -550,6 +551,8 @@ def get_reports(ip: str, port: int, package: str, module: str, test_set: str):
         query = f"{query}&modules={','.join(module)}"
     if test_set:
         query = f"{query}&test_sets={','.join(test_set)}"
+    if test:
+        query = f"{query}&tests={','.join(test)}"
     query = query.replace("&", "?", 1)
 
     try:
