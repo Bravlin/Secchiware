@@ -594,10 +594,13 @@ def list_installed_test_sets(ip, port):
             f"{environment_key}:installed_index",
             0,
             -1)
-        installed_str = ",".join(memory_storage.hmget(
-            environment_key,
-            tuple(f"installed:{p}" for p in packages_names)))
-        installed_str = f"[{installed_str}]"
+        if not packages_names:
+            installed_str = "[]"
+        else:
+            installed_str = ",".join(memory_storage.hmget(
+                environment_key,
+                tuple(f"installed:{p}" for p in packages_names)))
+            installed_str = f"[{installed_str}]"
     else:
         try:
             resp = rq.get(f"http://{ip}:{port}/test_sets")
