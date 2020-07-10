@@ -284,7 +284,7 @@ class TestSetCollection():
         dictionaries on itself that have a key named 'execute_all' with a
         boolean value that specifies if all tests from that test set must be
         executed. If that is not the case, an additional key,
-        'filtered_tests', is included, whose value is a list of names
+        'filtered_tests', is included, whose value is a set of names
         corresponding to the desired tests.
 
     Instance methods
@@ -477,9 +477,9 @@ class TestSetCollection():
             elif not c in self.test_sets:
                 self.test_sets[c] = {}
                 self.test_sets[c]['execute_all'] = False
-                self.test_sets[c]['filtered_tests'] = [test]
+                self.test_sets[c]['filtered_tests'] = {test}
             elif not self.test_sets[c]['execute_all']:
-                self.test_sets[c]['filtered_tests'].append(test)
+                self.test_sets[c]['filtered_tests'].add(test)
 
     def run_all(self) -> List[dict]:
         """Instantiates all the test sets in the collection and executes its
