@@ -1,102 +1,37 @@
 import hmac
 import json
 import os
-import redis
 import redis_custom_locking as rcl
 import requests as rq
-import signatures
 import shutil
-import signal
+import signatures
 import sqlite3
-import sys
 import tempfile
 import test_utils
 import time
 
 from base64 import b64encode
-from flask import abort, Flask, g, jsonify, request, Response
+from flask import Blueprint, Response, abort, current_app, jsonify, request
 from flask_cors import CORS
 from hashlib import sha256
+from secchiware_c2.database import get_database
+from secchiware_c2.memory_storage import get_memory_storage
 from typing import Callable, Dict, Optional, Tuple
 
 
-################################ Globals #####################################
-
-SCRIPT_PATH = os.path.dirname(os.path.abspath(__file__))
-TESTS_PATH = os.path.join(SCRIPT_PATH, "test_sets")
-DATABASE_PATH = os.path.join(SCRIPT_PATH, "secchiware.db")
-
-with open(os.path.join(SCRIPT_PATH, "config.json"), "r") as config_file:
-    config = json.load(config_file)
-config['NODE_SECRET'] = config['NODE_SECRET'].encode()
-config['CLIENT_SECRET'] = config['CLIENT_SECRET'].encode()
-
-
-########################### Key recoverer functions ##########################
-
-def client_key_recoverer(key_id: str) -> Optional[bytes]:
-    """The key recoverer for client oriented endpoints. Only the ID 'Client'
-    is allowed.
-    
-    Parameters
-    ----------
-    key_id: str
-        The ID to look for.
-
-    Returns
-    -------
-    bytes, optional
-        The key corresponding to the given ID or None if there was no match.
-    """
-
-    return config['CLIENT_SECRET'] if key_id == "Client" else None
-
-def node_key_recoverer(key_id: str) -> Optional[bytes]:
-    """The key recoverer for node oriented endpoints. Only the ID 'Node' is
-    allowed.
-    
-    Parameters
-    ----------
-    key_id: str
-        The ID to look for.
-
-    Returns
-    -------
-    bytes, optional
-        The key corresponding to the given ID or None if there was no match.
-    """
-
-    return config['NODE_SECRET'] if key_id == "Node" else None
+bp = Blueprint("routes", __name__)
+CORS(
+    bp,
+    resources={
+        r"/environments": {'methods': "GET"},
+        r"/environments/([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]+/+": {},
+        r"/executions/*": {},
+        r"/sessions/*": {},
+        r"/test_sets/*": {}
+    })
 
 
-######################## Database related functions ##########################
-
-def get_database() -> sqlite3.Connection:
-    """Gets a database connection.
-
-    It starts one if it was not already created.
-
-    Returns
-    -------
-    sqlite3.Connection
-        The open database connection.
-    """
-
-    db = getattr(g, '_database', None)
-    if db is None:
-        db = g._database = sqlite3.connect(DATABASE_PATH)
-        db.row_factory = sqlite3.Row
-        db.execute("PRAGMA foreign_keys = ON")
-    return db
-
-def init_database() -> None:
-    """Creates in the database the schemas needed for the application, if they
-    don't exist."""
-
-    db = get_database()
-    with open(os.path.join(SCRIPT_PATH, "schema.sql")) as f:
-        db.executescript(f.read())
-    db.commit()
+############################ Helper functions ################################
 
 def api_parametrized_search(
         db: sqlite3.Connection,
@@ -203,45 +138,6 @@ def api_parametrized_search(
     query = f"{query} {where_clause} {order_by_clause} {limit_clause}"
     return db.execute(query, placeholders_values)
 
-
-################### Memory storage related function ##########################
-
-def get_memory_storage() -> redis.StrictRedis:
-    """Gets a connection to the in-memory storage.
-
-    It starts one if it was not already created.
-
-    Returns
-    -------
-    redis.StrictRedis
-        The connection to the in-memory storage.
-    """
-
-    memory_storage = getattr(g, '_memory_storage', None)
-    if memory_storage is None:
-        memory_storage = redis.StrictRedis(
-            host=config["REDIS"]["HOST"],
-            port=config["REDIS"]["PORT"],
-            db=config["REDIS"]["DB"],
-            password=config["REDIS"]["PASSWORD"],
-            decode_responses=True,
-            charset="utf-8")
-        g._memory_storage = memory_storage
-    return memory_storage
-
-def init_memory_storage() -> None:
-    """Initialize the in-memory storage cleaning any previous data and caching
-    the result of the instrospection of the available packages in the
-    repository."""
-
-    memory_storage = get_memory_storage()
-    memory_storage.flushdb()
-    pipe = memory_storage.pipeline()
-    for p in test_utils.get_installed_test_sets("test_sets"):
-        pipe.set(f"repository:{p['name']}", json.dumps(p))
-        pipe.zadd("repository_index", {p['name']: 0})
-    pipe.execute()
-
 def clear_environment_cache(environment_key: str) -> None:
     """Clear all cached data of the specified environment from the in-memory
     repository.
@@ -258,6 +154,43 @@ def clear_environment_cache(environment_key: str) -> None:
     pipe.delete(environment_key)
     pipe.delete(f"{environment_key}:installed_index")
     pipe.execute()
+
+
+############################ Key recover functions ###########################
+
+def client_key_recoverer(key_id: str) -> Optional[bytes]:
+    """The key recoverer for client oriented endpoints. Only the ID 'Client'
+    is allowed.
+    
+    Parameters
+    ----------
+    key_id: str
+        The ID to look for.
+
+    Returns
+    -------
+    bytes, optional
+        The key corresponding to the given ID or None if there was no match.
+    """
+
+    return current_app.config['CLIENT_SECRET'] if key_id == "Client" else None
+
+def node_key_recoverer(key_id: str) -> Optional[bytes]:
+    """The key recoverer for node oriented endpoints. Only the ID 'Node' is
+    allowed.
+    
+    Parameters
+    ----------
+    key_id: str
+        The ID to look for.
+
+    Returns
+    -------
+    bytes, optional
+        The key corresponding to the given ID or None if there was no match.
+    """
+
+    return current_app.config['NODE_SECRET'] if key_id == "Node" else None
 
 
 ######################## Request check functions #############################
@@ -363,64 +296,9 @@ def check_authorization_header(
         abort(401, description="Invalid signature.")
 
 
-######################## Flask app initialization ############################
-
-app = Flask(__name__)
-CORS(
-    app,
-    resources={
-        r"/environments": {'methods': "GET"},
-        r"/environments/([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]+/+": {},
-        r"/executions/*": {},
-        r"/sessions/*": {},
-        r"/test_sets/*": {}
-    })
-
-@app.teardown_appcontext
-def close_connection(exception):
-    db = getattr(g, '_database', None)
-    if db is not None:
-        db.close()
-
-
-############################# Error handlers #################################
-
-@app.errorhandler(400)
-def bad_request(e):
-    return jsonify(error=str(e)), 400
-
-@app.errorhandler(401)
-def unauthorized(e):
-    res = jsonify(error=str(e))
-    res.status_code = 401
-    res.headers['WWW-Authenticate'] = (
-        'SECCHIWARE-HMAC-256 realm="Access to C2"')
-    return res
-
-@app.errorhandler(404)
-def not_found(e):
-    return jsonify(error=str(e)), 404
-
-@app.errorhandler(415)
-def unsupported_media_type(e):
-    return jsonify(error=str(e)), 415
-
-@app.errorhandler(500)
-def internal_server_error(e):
-    return jsonify(error=str(e)), 500
-
-@app.errorhandler(502)
-def bad_gateway(e):
-    return jsonify(error=str(e)), 502
-
-@app.errorhandler(504)
-def gateway_timeout(e):
-    return jsonify(error=str(e)), 504
-
-
 ############################### Endpoints ####################################
 
-@app.route("/environments", methods=["GET"])
+@bp.route("/environments", methods=["GET"])
 def list_environments():
     db = get_database()
     cursor = db.execute(
@@ -441,7 +319,7 @@ def list_environments():
 
     return jsonify(environments)
 
-@app.route("/environments", methods=["POST"])
+@bp.route("/environments", methods=["POST"])
 def add_environment():
     check_digest_header()
     check_authorization_header(node_key_recoverer, "Digest")
@@ -512,7 +390,7 @@ def add_environment():
 
     return Response(status=204, mimetype="application/json")
 
-@app.route("/environments/<ip>/<int:port>", methods=["DELETE"])
+@bp.route("/environments/<ip>/<int:port>", methods=["DELETE"])
 def remove_environment(ip, port):
     check_authorization_header(node_key_recoverer)
 
@@ -532,7 +410,7 @@ def remove_environment(ip, port):
 
     return Response(status=204, mimetype="application/json")
 
-@app.route("/environments/<ip>/<int:port>/info", methods=["GET"])
+@bp.route("/environments/<ip>/<int:port>/info", methods=["GET"])
 def get_environment_info(ip, port):
     db = get_database()
     row = db.execute(
@@ -570,7 +448,7 @@ def get_environment_info(ip, port):
 
     return jsonify(info)
     
-@app.route("/environments/<ip>/<int:port>/installed", methods=["GET"])
+@bp.route("/environments/<ip>/<int:port>/installed", methods=["GET"])
 def list_installed_test_sets(ip, port):
     check_registered(ip, port)
 
@@ -636,7 +514,7 @@ def list_installed_test_sets(ip, port):
         status=200,
         mimetype="application/json")
 
-@app.route("/environments/<ip>/<int:port>/installed", methods=["PATCH"])
+@bp.route("/environments/<ip>/<int:port>/installed", methods=["PATCH"])
 def install_packages(ip, port):
     check_digest_header()
     check_authorization_header(client_key_recoverer, "Digest")
@@ -650,7 +528,10 @@ def install_packages(ip, port):
         with tempfile.SpooledTemporaryFile() as f:
             # Can throw ValueError.
             try:
-                test_utils.compress_test_packages(f, packages, TESTS_PATH)
+                test_utils.compress_test_packages(
+                    f,
+                    packages,
+                    current_app.config['TESTS_PATH'])
             except ValueError as e:
                 abort(400, description=str(e))
             f.seek(0)
@@ -664,7 +545,7 @@ def install_packages(ip, port):
 
         headers = ['Digest']
         signature = signatures.new_signature(
-            config['NODE_SECRET'],
+            current_app.config['NODE_SECRET'],
             "PATCH",
             "/test_sets",
             signature_headers=headers,
@@ -710,7 +591,7 @@ def install_packages(ip, port):
 
     abort(502, description=f"Unexpected response from node at {ip}:{port}")
 
-@app.route(
+@bp.route(
     "/environments/<ip>/<int:port>/installed/<package>",
     methods=["DELETE"])
 def delete_installed_package(ip, port, package):
@@ -718,7 +599,7 @@ def delete_installed_package(ip, port, package):
     check_registered(ip, port)
 
     signature = signatures.new_signature(
-        config['NODE_SECRET'],
+        current_app.config['NODE_SECRET'],
         "DELETE",
         f"/test_sets/{package}")
     authorization_content = signatures.new_authorization_header(
@@ -759,7 +640,7 @@ def delete_installed_package(ip, port, package):
 
         abort(502, description=f"Unexpected response from node at {ip}:{port}")
 
-@app.route("/environments/<ip>/<int:port>/reports", methods=["GET"])
+@bp.route("/environments/<ip>/<int:port>/reports", methods=["GET"])
 def execute_tests(ip, port):
     db = get_database()
     cursor = db.execute(
@@ -825,7 +706,7 @@ def execute_tests(ip, port):
     db.commit()
     return jsonify(resp.json())
 
-@app.route("/executions", methods=["GET"])
+@bp.route("/executions", methods=["GET"])
 def search_executions():
     db = get_database()
 
@@ -892,7 +773,7 @@ def search_executions():
     
     return jsonify(results)
 
-@app.route("/executions/<execution_id>", methods=["DELETE"])
+@bp.route("/executions/<execution_id>", methods=["DELETE"])
 def delete_execution(execution_id):
     check_authorization_header(client_key_recoverer)
 
@@ -907,7 +788,7 @@ def delete_execution(execution_id):
 
     return Response(status=204, mimetype="application/json")
 
-@app.route("/sessions", methods=["GET"])
+@bp.route("/sessions", methods=["GET"])
 def search_sessions():
     db = get_database()
     
@@ -969,7 +850,7 @@ def search_sessions():
 
     return jsonify(results)
 
-@app.route("/sessions/<session_id>", methods=["GET"])
+@bp.route("/sessions/<session_id>", methods=["GET"])
 def get_session(session_id):
     row = get_database().execute(
         """SELECT s.id_session, s.session_start, s.session_end, s.env_ip,
@@ -1014,7 +895,7 @@ def get_session(session_id):
 
     return jsonify(result)
 
-@app.route("/sessions/<session_id>", methods=["DELETE"])
+@bp.route("/sessions/<session_id>", methods=["DELETE"])
 def delete_session(session_id):
     check_authorization_header(client_key_recoverer)
 
@@ -1034,18 +915,24 @@ def delete_session(session_id):
 
     return Response(status=204, mimetype="application/json")
 
-@app.route("/test_sets", methods=["GET"])
+@bp.route("/test_sets", methods=["GET"])
 def list_available_test_sets():
     memory_storage = get_memory_storage()
+
     packages_names = memory_storage.zrange("repository_index", 0, -1)
-    packages_content = memory_storage.mget(
-        *tuple(f"repository:{p}" for p in packages_names))
+    if not packages_names:
+        resp = "[]"
+    else:
+        packages_content = memory_storage.mget(
+            *tuple(f"repository:{p}" for p in packages_names))
+        resp = f"[{','.join(packages_content)}]"
+
     return Response(
-        response=f"[{','.join(packages_content)}]",
+        response=resp,
         status=200,
         mimetype="application/json")
 
-@app.route("/test_sets", methods=["PATCH"])
+@bp.route("/test_sets", methods=["PATCH"])
 def upload_test_sets():
     if not request.mimetype == 'multipart/form-data':
         abort(415, description="Invalid request's content type")
@@ -1059,7 +946,7 @@ def upload_test_sets():
         try:
             new_packages = test_utils.uncompress_test_packages(
                 request.files['packages'],
-                TESTS_PATH)
+                current_app.config['TESTS_PATH'])
         except Exception:
             abort(400, description="Invalid file content")
 
@@ -1077,11 +964,11 @@ def upload_test_sets():
                             
     return Response(status=204, mimetype="application/json")
 
-@app.route("/test_sets/<package>", methods=["DELETE"])
+@bp.route("/test_sets/<package>", methods=["DELETE"])
 def delete_package(package):
     check_authorization_header(client_key_recoverer)
 
-    package_path = os.path.join(TESTS_PATH, package)
+    package_path = os.path.join(current_app.config['TESTS_PATH'], package)
     memory_storage = get_memory_storage()
     with rcl.WriterLock(memory_storage, "repository", 30, 1):
         if not os.path.isdir(package_path):
@@ -1097,73 +984,3 @@ def delete_package(package):
         pipe.execute()
 
     return Response(status=204, mimetype="application/json")
-
-########################## Additional functions ##############################
-
-def exit_gracefully(sig, frame):
-    """Signal handler that tries to warn all currently working nodes that the
-    C&C server is shutting down before it does so.
-    
-    It also updates the database ending all current sessions.
-    """
-
-    print("Starting exit...")
-
-    with app.app_context():
-        get_memory_storage().flushdb(asynchronous=True)
-
-        db = get_database() 
-        cursor = db.execute(
-            """SELECT env_ip, env_port
-            FROM session
-            WHERE session_end IS NULL""")
-
-        environments = cursor.fetchall()
-        if environments:
-            signature = signatures.new_signature(
-                config['NODE_SECRET'],
-                "DELETE",
-                "/")
-            authorization_content = (
-                signatures.new_authorization_header("C2", signature))
-
-            for env in environments:
-                ip = env['env_ip']
-                port = env['env_port']
-                try:
-                    resp = rq.delete(
-                        f"http://{ip}:{port}/",
-                        headers={'Authorization': authorization_content})
-                except rq.exceptions.ConnectionError:
-                    print(f"Node at {ip}:{port} could not be reached.")
-                else:
-                    if resp.status_code != 204:
-                        print(f"Unexpected response from node at {ip}:{port}.")
-                    else:
-                        print(f"Node at {ip}:{port} reached.")
-
-            cursor.execute(
-                """UPDATE session
-                SET session_end = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
-                WHERE session_end IS NULL""")
-            db.commit()
-    
-    print("Exiting...")
-    sys.exit()
-
-
-############################### Main program #################################
-
-if not os.path.isdir(TESTS_PATH):
-    os.mkdir(TESTS_PATH)
-    open(os.path.join(TESTS_PATH, "__init__.py"), "w").close()
-
-with app.app_context():
-    init_database()
-    init_memory_storage()
-
-signal.signal(signal.SIGTERM, exit_gracefully)
-signal.signal(signal.SIGINT, exit_gracefully)
-
-if __name__ == "__main__":
-    app.run(host=config['IP'], port=config['PORT'])

@@ -1,4 +1,9 @@
-CREATE TABLE IF NOT EXISTS session
+DROP TABLE IF EXISTS report;
+DROP TABLE IF EXISTS execution;
+DROP INDEX IF EXISTS active_environments;
+DROP TABLE IF EXISTS session;
+
+CREATE TABLE session
 (
 	id_session INTEGER PRIMARY KEY,
 	session_start TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
@@ -19,7 +24,7 @@ CREATE TABLE IF NOT EXISTS session
 	env_py_version TEXT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS execution
+CREATE TABLE execution
 (
 	id_execution INTEGER PRIMARY KEY,
 	fk_session INTEGER NOT NULL,
@@ -30,7 +35,7 @@ CREATE TABLE IF NOT EXISTS execution
         ON DELETE CASCADE
 );
 
-CREATE TABLE IF NOT EXISTS report
+CREATE TABLE report
 (
 	id_report INTEGER PRIMARY KEY,
 	fk_execution INTEGER NOT NULL,
@@ -46,7 +51,7 @@ CREATE TABLE IF NOT EXISTS report
 	    ON DELETE CASCADE
 );
 
-CREATE INDEX IF NOT EXISTS active_environments
+CREATE INDEX active_environments
 ON session(env_ip, env_port)
 WHERE session_end IS NULL;
             
