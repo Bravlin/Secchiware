@@ -1,8 +1,7 @@
 import os
 import sys
 
-from secchiware_c2 import (
-    database, error_handlers, memory_storage, routes, tests_repository)
+from secchiware_c2 import database, error_handlers, routes, tasks
 from flask import Flask
 
 
@@ -18,8 +17,7 @@ def create_app() -> Flask:
     sys.path.append(app.instance_path)
 
     database.init_app(app)
-    memory_storage.init_app(app)
-    tests_repository.init_app(app)
+    tasks.init_app(app)
 
     app.register_blueprint(error_handlers.bp)
     app.register_blueprint(routes.bp)

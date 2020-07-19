@@ -7,9 +7,6 @@ from flask.cli import with_appcontext
 from test_utils import get_installed_test_sets
 
 
-def init_app(app):
-    app.cli.add_command(init_memory_storage_command)
-
 def get_memory_storage() -> redis.StrictRedis:
     """Gets a connection to the in-memory storage.
 
@@ -32,24 +29,19 @@ def get_memory_storage() -> redis.StrictRedis:
     
     return g.memory_storage
 
-def init_memory_storage() -> None:
-    """Initialize the in-memory storage cleaning any previous data and caching
-    the result of the inspection of the available packages in the
-    repository."""
+def clear_environment_cache(environment_key: str) -> None:
+    """Clear all cached data of the specified environment from the in-memory
+    repository.
+
+    Parameters
+    ----------
+    environment_key: str
+        The key by which the environment is identified in the in-memory
+        repository.
+    """
 
     memory_storage = get_memory_storage()
-    memory_storage.flushdb()
     pipe = memory_storage.pipeline()
-    for p in get_installed_test_sets("test_sets"):
-        pipe.set(f"repository:{p['name']}", json.dumps(p))
-        pipe.zadd("repository_index", {p['name']: 0})
+    pipe.delete(environment_key)
+    pipe.delete(f"{environment_key}:installed_index")
     pipe.execute()
-
-@click.command("init-memory-storage")
-@with_appcontext
-def init_memory_storage_command():
-    """Clear the memory storage and initialize it with the result of the
-    inspection of the available packages in the tests repository."""
-
-    init_memory_storage()
-    click.echo("Memory storage initialized.")

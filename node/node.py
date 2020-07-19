@@ -66,6 +66,7 @@ def check_authorization_header(*mandatory_headers) -> None:
     if not is_valid:
         abort(401, description="Invalid signature.")
 
+
 ######################## Flask app initialization ############################
 
 app = Flask(__name__)

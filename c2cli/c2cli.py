@@ -30,12 +30,12 @@ def lsavialable():
     try:
         resp = requests.get(f"{C2_URL}/test_sets")
     except requests.exceptions.ConnectionError:
-        print("Connection refused.")
+        click.echo("Connection refused.")
     else:
         if resp.status_code == 200:
-            print(json.dumps(resp.json(), indent=2))
+            click.echo(json.dumps(resp.json(), indent=2))
         else:
-            print("Unexpected response from Command and Control Sever.")
+            click.echo("Unexpected response from Command and Control Sever.")
 
 @main.command(
     "upload",
@@ -53,7 +53,7 @@ def upload_compressed_packages(password: str, file_path: click.Path):
     """Uploads a tar.gz file full of packages to the C&C server."""
 
     if not file_path.endswith(".tar.gz"):
-        print("Only .tar.gz extension allowed.")
+        click.echo("Only .tar.gz extension allowed.")
     else:
         with open(file_path, "rb") as f:
             prepared = requests.Request(
@@ -77,12 +77,13 @@ def upload_compressed_packages(password: str, file_path: click.Path):
         try:
             resp = requests.Session().send(prepared)
         except requests.exceptions.ConnectionError:
-            print("Connection refused.")
+            click.echo("Connection refused.")
         else:
             if resp.status_code in {400, 401, 415}:
-                print(resp.json()['error'])
+                click.echo(resp.json()['error'])
             elif resp.status_code != 204:
-                print("Unexpected response from Command and Control Sever.")
+                click.echo(
+                    "Unexpected response from Command and Control Sever.")
 
 @main.command(
     "remove",
@@ -112,12 +113,13 @@ def remove_available_packages(password: str, packages: List[str]):
                 f"{C2_URL}/test_sets/{pack}",
                 headers={'Authorization': auth_content})
         except requests.exceptions.ConnectionError:
-            print("Connection refused.")
+            click.echo("Connection refused.")
         else:
             if resp.status_code in {401, 404}:
-                print(resp.json()['error'])
+                click.echo(resp.json()['error'])
             elif resp.status_code != 204:
-                print("Unexpected response from Command and Control Sever.")
+                click.echo(
+                    "Unexpected response from Command and Control Sever.")
 
 @main.command(
     "lsenv",
@@ -130,12 +132,12 @@ def lsenv():
     try:
         resp = requests.get(f"{C2_URL}/environments")
     except requests.exceptions.ConnectionError:
-        print("Connection refused.")
+        click.echo("Connection refused.")
     else:
         if resp.status_code != 200:
-            print("Unexpected response from Command and Control Sever.")
+            click.echo("Unexpected response from Command and Control Sever.")
         else:
-            print(json.dumps(resp.json(), indent=2))
+            click.echo(json.dumps(resp.json(), indent=2))
 
 @main.command(
     "sessions_search",
@@ -226,14 +228,14 @@ def search_sessions(
     try:
         resp = requests.get(f"{C2_URL}/sessions{query}")
     except requests.exceptions.ConnectionError:
-        print("Connection refused.")
+        click.echo("Connection refused.")
     else:
         if resp.status_code == 200:
-            print(json.dumps(resp.json(), indent=2))
+            click.echo(json.dumps(resp.json(), indent=2))
         elif resp.status_code == 400:
-            print(resp.json()['error'])
+            click.echo(resp.json()['error'])
         else:
-            print("Unexpected response from Command and Control Sever.")
+            click.echo("Unexpected response from Command and Control Sever.")
 
 @main.command(
     "session_get",
@@ -245,14 +247,14 @@ def get_session(session: int):
     try:
         resp = requests.get(f"{C2_URL}/sessions/{session}")
     except requests.exceptions.ConnectionError:
-        print("Connection refused.")
+        click.echo("Connection refused.")
     else:
         if resp.status_code == 200:
-            print(json.dumps(resp.json(), indent=2))
+            click.echo(json.dumps(resp.json(), indent=2))
         elif resp.status_code == 404:
-            print(resp.json()['error'])
+            click.echo(resp.json()['error'])
         else:
-            print("Unexpected response from Command and Control Sever.")
+            click.echo("Unexpected response from Command and Control Sever.")
 
 @main.command("sessions_delete", short_help="Delete the specified SESSIONS.")
 @click.option(
@@ -280,12 +282,13 @@ def delete_sessions(password: str, sessions: List[int]):
                 f"{C2_URL}/sessions/{session}",
                 headers={'Authorization': auth_content})
         except requests.exceptions.ConnectionError:
-            print("Connection refused.")
+            click.echo("Connection refused.")
         else:
             if resp.status_code in {400, 401, 404}:
-                print(resp.json()['error'])
+                click.echo(resp.json()['error'])
             elif resp.status_code != 204:
-                print("Unexpected response from Command and Control Sever.")
+                click.echo(
+                    "Unexpected response from Command and Control Sever.")
 
 @main.command(
     "executions_search",
@@ -356,14 +359,14 @@ def search_executions(
     try:
         resp = requests.get(f"{C2_URL}/executions{query}")
     except requests.exceptions.ConnectionError:
-        print("Connection refused.")
+        click.echo("Connection refused.")
     else:
         if resp.status_code == 200:
-            print(json.dumps(resp.json(), indent=2))
+            click.echo(json.dumps(resp.json(), indent=2))
         elif resp.status_code == 400:
-            print(resp.json()['error'])
+            click.echo(resp.json()['error'])
         else:
-            print("Unexpected response from Command and Control Sever.")
+            click.echo("Unexpected response from Command and Control Sever.")
 
 @main.command(
     "executions_delete",
@@ -393,12 +396,13 @@ def delete_executions(password: str, executions: List[int]):
                 f"{C2_URL}/executions/{execution}",
                 headers={'Authorization': auth_content})
         except requests.exceptions.ConnectionError:
-            print("Connection refused.")
+            click.echo("Connection refused.")
         else:
             if resp.status_code in {401, 404}:
-                print(resp.json()['error'])
+                click.echo(resp.json()['error'])
             elif resp.status_code != 204:
-                print("Unexpected response from Command and Control Sever.")
+                click.echo(
+                    "Unexpected response from Command and Control Sever.")
 
 @main.command(
     "info",
@@ -414,14 +418,14 @@ def info(ip: str, port: int):
     try:
         resp = requests.get(f"{C2_URL}/environments/{ip}/{port}/info")
     except requests.exceptions.ConnectionError:
-        print("Connection refused.")
+        click.echo("Connection refused.")
     else:
         if resp.status_code == 200:
-            print(json.dumps(resp.json(), indent=2))
+            click.echo(json.dumps(resp.json(), indent=2))
         elif resp.status_code == 404:
-            print(resp.json()['error'])
+            click.echo(resp.json()['error'])
         else:
-            print("Unexpected response from Command and Control Sever.")
+            click.echo("Unexpected response from Command and Control Sever.")
 
 @main.command(
     "lsinstalled",
@@ -437,16 +441,16 @@ def lsinstalled(ip: str, port: int):
     try:
         resp = requests.get(f"{C2_URL}/environments/{ip}/{port}/installed")
     except requests.exceptions.ConnectionError:
-        print("Connection refused.")
+        click.echo("Connection refused.")
     except Exception:
-        print(resp.json()['error'])
+        click.echo(resp.json()['error'])
     else:
         if resp.status_code == 200:
-            print(json.dumps(resp.json(), indent=2))
+            click.echo(json.dumps(resp.json(), indent=2))
         elif resp.status_code in {404, 502, 504}:
-            print(resp.json()['error'])
+            click.echo(resp.json()['error'])
         else:
-            print("Unexpected response from Command and Control Sever.")
+            click.echo("Unexpected response from Command and Control Sever.")
 
 @main.command(
     "install",
@@ -485,12 +489,12 @@ def install(password: str, ip: str, port: int, packages: List[str]):
     try:
         resp = requests.Session().send(prepared)
     except requests.exceptions.ConnectionError:
-        print("Connection refused.")
+        click.echo("Connection refused.")
     else:
         if resp.status_code in {400, 401, 404, 415, 500, 502, 504}:
-            print(resp.json()['error'])
+            click.echo(resp.json()['error'])
         elif resp.status_code != 204:
-            print("Unexpected response from Command and Control Sever.")
+            click.echo("Unexpected response from Command and Control Sever.")
 
 @main.command(
     "uninstall",
@@ -522,12 +526,13 @@ def uninstall(password: str, ip: str, port: int, packages: List[str]):
                 f"{C2_URL}/environments/{ip}/{port}/installed/{pack}",
                 headers={'Authorization': auth_content})
         except requests.exceptions.ConnectionError:
-            print("Connection refused.")
+            click.echo("Connection refused.")
         else:
             if resp.status_code in {401, 404, 502, 504}:
-               print(resp.json()['error'])
+               click.echo(resp.json()['error'])
             elif resp.status_code != 204:
-                print("Unexpected response from Command and Control Sever.")
+                click.echo(
+                    "Unexpected response from Command and Control Sever.")
 
 @main.command(
     "reports_get",
@@ -540,7 +545,13 @@ def uninstall(password: str, ip: str, port: int, packages: List[str]):
 @click.option("--module", "-m", multiple=True)
 @click.option("--test_set", "-t", multiple=True)
 @click.option("--test", "-t", multiple=True)
-def get_reports(ip: str, port: int, package: str, module: str, test_set: str, test: str):
+def get_reports(
+        ip: str,
+        port: int,
+        package: str,
+        module: str,
+        test_set: str,
+        test: str):
     """Execute and recover the reports of the tests installed in the
     environment at IP:PORT."""
 
@@ -559,14 +570,14 @@ def get_reports(ip: str, port: int, package: str, module: str, test_set: str, te
         resp = requests.get(
             f"{C2_URL}/environments/{ip}/{port}/reports{query}")
     except requests.exceptions.ConnectionError:
-        print("Connection refused.")
+        click.echo("Connection refused.")
     else:
         if resp.status_code == 200:
-            print(json.dumps(resp.json(), indent=2))
+            click.echo(json.dumps(resp.json(), indent=2))
         elif resp.status_code in {400, 404, 500, 502, 504}:
-            print(resp.json()['error'])
+            click.echo(resp.json()['error'])
         else:
-            print("Unexpected response from Command and Control Sever.")
+            click.echo("Unexpected response from Command and Control Sever.")
 
 if __name__ == "__main__":
     main()

@@ -14,8 +14,9 @@ from base64 import b64encode
 from flask import Blueprint, Response, abort, current_app, jsonify, request
 from flask_cors import CORS
 from hashlib import sha256
-from secchiware_c2.database import get_database
-from secchiware_c2.memory_storage import get_memory_storage
+from secchiware_c2.database import api_parametrized_search, get_database
+from secchiware_c2.memory_storage import (
+    clear_environment_cache, get_memory_storage)
 from typing import Callable, Dict, Optional, Tuple
 
 
@@ -29,131 +30,6 @@ CORS(
         r"/sessions/*": {},
         r"/test_sets/*": {}
     })
-
-
-############################ Helper functions ################################
-
-def api_parametrized_search(
-        db: sqlite3.Connection,
-        table: str,
-        order_by_api_to_db: Dict[str, str],
-        where_api_to_db: Dict[str, Tuple[str, str]],
-        parameters: dict,
-        select_columns: tuple = None) -> sqlite3.Cursor:
-    """Converts the recieved parameters into a SQL SELECT statement, executes
-    it and returns the corresponding cursor.
-
-    Parameters
-    ----------
-    db: sqlite3.Connection
-        The connection to the database to query to.
-    table: str
-        The database table to look into.
-    order_by_api_to_db: Dict[str, str]
-        A dictionary where each key is one of the accepted parameters to sort
-        by of the external API and its value is the corresponding column name.
-    where_api_to_db: Dict[str, Tuple[str, str]]
-        A dictionary where each key is one of the accepted parameters to
-        filter by of the external API and its values is a tuple where the
-        first member is the corresponding column name and the second one is
-        the associated operator.
-    parameters: dict
-        A dictionary where each key-value pair is the name of an argument
-        recieved by the external API and its corresponding value.
-    select_columns: tuple
-        The columns that the developer wants to return with the generated
-        query.
-
-    Exceptions
-    ----------
-    ValueError
-        There is content present in the "parameters" argument that is not
-        valid.
-
-    Returns
-    -------
-    sqlite3.Cursor
-        A cursor to the formulated query.
-    """
-
-    if not select_columns:
-        query = f"SELECT * FROM {table}"
-    else:
-        query = f"SELECT {', '.join(select_columns)} FROM {table}"
-
-    param_keys = {*parameters.keys()}
-    if not 'order_by' in param_keys:
-        if 'arrange' in param_keys:
-            raise ValueError("arrange key present when no order is specified")
-        order_by_clause = ""
-    else:
-        if not parameters['order_by'] in order_by_api_to_db:
-            raise ValueError("Invalid order key")
-        order_by_clause = (
-            f"ORDER BY {order_by_api_to_db[parameters['order_by']]}")
-        param_keys.remove('order_by')
-
-        if 'arrange' in param_keys:
-            if parameters['arrange'] not in {'asc', 'desc'}:
-                raise ValueError("Invalid arrange value")
-            order_by_clause = f"{order_by_clause} {parameters['arrange']}"
-            param_keys.remove('arrange')
-    
-    if not 'limit' in param_keys:
-        if 'offset' in param_keys:
-            raise ValueError("offset key present when no limit is specified")
-        limit_clause = ""
-    else:
-        if int(parameters['limit']) <= 0:
-            raise ValueError("Invalid limit value")
-        limit_clause = f"LIMIT {parameters['limit']}"
-        param_keys.remove('limit')
-
-        if 'offset' in param_keys:
-            if int(parameters['offset']) < 0:
-                raise ValueError("Invalid offset value")
-            limit_clause = f"{limit_clause} OFFSET {parameters['offset']}"
-            param_keys.remove('offset')
-
-    where_clause = ""
-    placeholders_values = {}
-    for key in param_keys:
-        if key not in where_api_to_db:
-            raise ValueError("Invalid query parameter found")
-        where_filter = ""
-        column = where_api_to_db[key][0]
-        operator = where_api_to_db[key][1]
-        i = 0
-        for value in parameters[key].split(","):
-            placeholder_key = f"{key}{i}"
-            placeholders_values[placeholder_key] = value
-            where_filter = (
-                f"{where_filter} OR {column}{operator}:{placeholder_key}")
-            i += 1
-
-        where_filter = where_filter.replace(" OR ", "", 1)
-        where_clause = f"{where_clause} AND ({where_filter})"
-    where_clause = where_clause.replace(" AND", "WHERE", 1)
-
-    query = f"{query} {where_clause} {order_by_clause} {limit_clause}"
-    return db.execute(query, placeholders_values)
-
-def clear_environment_cache(environment_key: str) -> None:
-    """Clear all cached data of the specified environment from the in-memory
-    repository.
-
-    Parameters
-    ----------
-    environment_key: str
-        The key by which the environment is identified in the in-memory
-        repository.
-    """
-
-    memory_storage = get_memory_storage()
-    pipe = memory_storage.pipeline()
-    pipe.delete(environment_key)
-    pipe.delete(f"{environment_key}:installed_index")
-    pipe.execute()
 
 
 ############################ Key recover functions ###########################
@@ -715,7 +591,6 @@ def search_executions():
     else:
         try:
             cursor = api_parametrized_search(
-                db=db,
                 table="execution",
                 order_by_api_to_db={
                     'id': "id_execution",
@@ -800,7 +675,6 @@ def search_sessions():
     else:
         try:
             cursor = api_parametrized_search(
-                db=db,
                 table="session",
                 order_by_api_to_db={
                     'id': "id_session",
