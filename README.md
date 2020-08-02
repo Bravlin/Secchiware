@@ -1,23 +1,26 @@
 # Secchiware
 
 ## About
+
 Secchiware is a free (libre) transparency tester for malware dynamic analysis environments. Its main goal is to aid system administrators and computer security investigators in the process of building better environments resilient to be discovered by malware.
 
 ### Features
+
 * A "nanoframework" is provided to ease the development of new tests, understanding that the ever-changing nature of malware requires a flexible tool.
 * Management of multiple environments through a central server.
-* Uploading and execution of selected tests in the user environments.
-* Saving of the results of the executed tests and of the connected environments.
+* Uploading and execution of selected tests in the user's environments.
+* Persistance of the results of the executed tests and of the information about the connected environments.
 * A simple CLI client to start using the tool right away.
 * A GUI client which can be found [here](https://github.com/Bravlin/secchiware-desktop-client).
 
 ### Repository contents
+
 * node: The component to be executed in each desired environment. When it starts, it tries to connect to the configured central server. If that is done successfully, a local server is initiated by which the node is allowed to be managed; if that is not the case, all already installed tests in the environment are executed and returned through the standard output.
 * c2: The central server, better known as the command and control server (benevolent intentions only!). Through it a client can manage all active nodes, do CRUD operations on the tests repository held by the server and check the histories of nodes' sessions and tests results.
 * c2cli: A command line interface client to interact with the software.
 * common: Libraries used by the previous components.
 * test_sets_dev: Modules containing a variety of exemplary tests.
-* api_documentation: The APIs for the c2 and node servers described using the OpenAPI specification. Anyone interested in implementing their own node, c2 or client should check it out.
+* api_documentation: The APIs for the c2 and node servers described using the OpenAPI specification. Anyone interested in learn more about or implementing their own node, c2 or client should check it out.
 
 ## Installation
 
@@ -28,6 +31,7 @@ pip install -e common
 ```
 
 ### Node installation
+
 Just execute the next command to install the required dependencies:
 
 ```
@@ -47,6 +51,7 @@ python node/node.py
 ```
 
 ### C2 installation
+
 First install its dependencies with:
 
 ```
@@ -92,4 +97,9 @@ python c2cli/c2cli.py <COMMAND> <ARGUMENTS>
 ```
 
 ## License
+
 Secchiware is licensed under the GNU General Public License v3.0.
+
+## Author
+
+[Bravlin](https://github.com/Bravlin): Braulio Pablos
