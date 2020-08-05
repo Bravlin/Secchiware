@@ -98,7 +98,7 @@ class QPython3HumanUseSet(TestSet):
         description="Verifies that WhatsApp is a launchable application.")
     def whatsapp_installed(self) -> TestResult:
         apps = self.droid.getLaunchableApplications()
-        if apps.get('WhatsApp'):
+        if apps.result.get('WhatsApp'):
             return TestSet.TEST_PASSED
         return TestSet.TEST_FAILED
 

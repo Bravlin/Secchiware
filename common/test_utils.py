@@ -155,25 +155,35 @@ class TestSet(ABC):
                 report = {}
                 report['timestamp_start'] = (datetime.utcnow()
                     .strftime('%Y-%m-%dT%H:%M:%S.%fZ'))
-                result = method(self)
-                report['timestamp_end'] = (datetime.utcnow()
-                    .strftime('%Y-%m-%dT%H:%M:%S.%fZ'))
 
-                if isinstance(result, int):
-                    report['result_code'] = result
-                elif not isinstance(result, tuple):
-                    raise InvalidTestMethod("Invalid return type.")
-                elif len(result) != 2:
-                    raise InvalidTestMethod(
-                        "Incorrect number of return values.")
-                elif not isinstance(result[0], int):
-                    raise InvalidTestMethod("Result code is not an integer.")
-                elif not isinstance(result[1], dict):
-                    raise InvalidTestMethod(
-                        "Second return value is not a dictionary.")
+                try:
+                    result = method(self)
+                except Exception as e:
+                    report['timestamp_end'] = (datetime.utcnow()
+                        .strftime('%Y-%m-%dT%H:%M:%S.%fZ'))
+                    report['result_code'] = 0
+                    report['additional_info'] = {
+                        'unhandled_exception': str(e)
+                    }
                 else:
-                    report['result_code'] = result[0]
-                    report['additional_info'] = result[1]
+                    report['timestamp_end'] = (datetime.utcnow()
+                        .strftime('%Y-%m-%dT%H:%M:%S.%fZ'))
+                    if isinstance(result, int):
+                        report['result_code'] = result
+                    elif not isinstance(result, tuple):
+                        raise InvalidTestMethod("Invalid return type.")
+                    elif len(result) != 2:
+                        raise InvalidTestMethod(
+                            "Incorrect number of return values.")
+                    elif not isinstance(result[0], int):
+                        raise InvalidTestMethod(
+                            "Result code is not an integer.")
+                    elif not isinstance(result[1], dict):
+                        raise InvalidTestMethod(
+                            "Second return value is not a dictionary.")
+                    else:
+                        report['result_code'] = result[0]
+                        report['additional_info'] = result[1]
 
                 report['test_name'] = name
                 report['test_description'] = description
