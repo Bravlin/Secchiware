@@ -8,7 +8,7 @@ class X86VirtualizationSet(TestSet):
         description=
             "Checks if the content of '/sys/class/dmi/id/product_name' "
             "matches against 'VirtualBox' or 'VMWare'.")
-    def product_name(self) -> TestSet:
+    def product_name(self) -> TestResult:
         with open("/sys/class/dmi/id/product_name", "r") as f:
             product_name = f.read().rstrip()
         additional_info = {

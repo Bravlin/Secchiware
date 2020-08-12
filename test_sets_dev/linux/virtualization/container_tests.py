@@ -36,7 +36,7 @@ class ContainerSet(TestSet):
         description=
             "Verifies that the name of the process with PID 1 corresponds to "
             "a well known init.")
-    def is_first_process_an_init(self) -> TestSet:
+    def is_first_process_an_init(self) -> TestResult:
         known_inits = {"systemd", "upstart", "sysv-init"}
         with open("/proc/1/sched", "r") as f:
             process_name = f.readline().split(" ")[0]

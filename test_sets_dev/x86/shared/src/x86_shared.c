@@ -6,7 +6,6 @@
 
 int CPUID_HypervisorBitTest()
 {
-    // From https://github.com/a0rtega/pafish
     uint32_t ecx;
     asm volatile (
         "cpuid" \
