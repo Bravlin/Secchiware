@@ -7,7 +7,7 @@ CREATE TABLE session
 (
 	id_session INTEGER PRIMARY KEY,
 	session_start TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
-	session_end INTEGER,
+	session_end TEXT,
 	env_ip TEXT NOT NULL,
 	env_port INTEGER NOT NULL,
 	env_platform TEXT NOT NULL,
@@ -28,7 +28,7 @@ CREATE TABLE execution
 (
 	id_execution INTEGER PRIMARY KEY,
 	fk_session INTEGER NOT NULL,
-    timestamp_registered INTEGER DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    timestamp_registered TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
     CONSTRAINT execution_session
         FOREIGN KEY (fk_session)
         REFERENCES session(id_session)
